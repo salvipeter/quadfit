@@ -1,0 +1,55 @@
+PWGB File Format
+----------------
+
+# First part - ribbons
+#   Ribbons are described by two cubic B-spline curves
+<number of sides>
+<Side 1 outer curve>   # (see Appendix)
+<Side 1 inner curve>
+<Side 2 outer curve>
+...
+
+# Second part - curvenet segments
+#   Segments are described as B-spline curves
+<number of segments>
+<Segment 1>            # (see Appendix)
+<Segment 2>
+...
+
+# Third part - quads
+#   Quads are described by referring to the segments
+#     Negative indices show direction reversal
+#   There are also references to the ribbon curves
+#     0 index means the side is not on a ribbon
+<number of quads>
+<Quad 1 u=0 segment index> <Quad 1 u=0 ribbon index> [interval if index != 0: s_min s_max]
+<Quad 1 v=0 segment index> <Quad 1 v=0 ribbon index> [interval if index != 0: s_min s_max]
+<Quad 1 u=1 segment index> <Quad 1 u=1 ribbon index> [interval if index != 0: s_min s_max]
+<Quad 1 v=1 segment index> <Quad 1 v=1 ribbon index> [interval if index != 0: s_min s_max]
+<Quad 2 u=0 segment index> <Quad 2 u=0 ribbon index> [interval if index != 0: s_min s_max]
+...
+
+# Fourth part - sampled points
+#   There will be (res + 1) * (res + 1) points for each quad
+<Quad 1 sampling resolution>
+<Quad 1 sample point at u=0,v=0: x y z>
+<Quad 1 sample point at u=0,v=1/res: x y z>
+...
+<Quad 1 sample point at u=0,v=1: x y z>
+<Quad 1 sample point at u=1/res,v=0: x y z>
+<Quad 1 sample point at u=1/res,v=1/res: x y z>
+...
+<Quad 1 sample point at u=1,v=1: x y z>
+<Quad 2 sampling resolution>
+...
+
+EOF
+
+## Appendix
+# Curves are described as:
+
+<degree>
+<number of knots>
+<knot values>
+<number of control points>
+<control points: x1 y1 z1 x2 y2 ...>

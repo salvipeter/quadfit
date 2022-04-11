@@ -1,6 +1,9 @@
 PWGB File Format
 ----------------
 
+# The first line of the file is a description of its contents
+#   There should be no other comments in the file.
+
 # First part - ribbons
 #   Ribbons are described by two cubic B-spline curves
 <number of sides>

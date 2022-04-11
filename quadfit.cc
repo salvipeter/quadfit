@@ -26,9 +26,12 @@ static BSCurve readBSpline(std::istream &is) {
   return { degree, knots, cpts };
 }
 
-void QuadFit::readPWGB(std::string filename) {
+std::string QuadFit::readPWGB(std::string filename) {
   std::ifstream f(filename);
   f.exceptions(std::ios::failbit | std::ios::badbit);
+
+  std::string description;
+  std::getline(f, description);
 
   // Part 1 : Ribbons
   size_t n_ribbons;
@@ -75,6 +78,8 @@ void QuadFit::readPWGB(std::string filename) {
     for (size_t j = 0; j < n_samples; ++j)
       quads[i].samples[j] = readPoint(f);
   }
+
+  return description;
 }
 
 std::vector<BSSurface> QuadFit::fit() {

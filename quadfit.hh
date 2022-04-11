@@ -2,7 +2,7 @@
 
 class QuadFit {
 public:
-  void readPWGB(std::string filename);
+  std::string readPWGB(std::string filename);      // returns model description
   std::vector<Geometry::BSSurface> fit();
 
 private:

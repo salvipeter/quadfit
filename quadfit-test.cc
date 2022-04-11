@@ -110,8 +110,9 @@ int main(int argc, char **argv) {
     resolution = std::atoi(argv[2]);
 
   QuadFit qf;
-  qf.readPWGB(argv[1]);
-  std::cout << "Input file \"" << argv[1] << "\" read" << std::endl;
+  auto description = qf.readPWGB(argv[1]);
+  std::cout << "Input file \"" << argv[1] << "\" read:" << std::endl;
+  std::cout << "\t" << description << std::endl;
 
   auto surfaces = qf.fit();
   std::cout << "Fit of " << surfaces.size() << " surfaces completed" << std::endl;

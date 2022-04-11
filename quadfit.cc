@@ -77,6 +77,31 @@ void QuadFit::readPWGB(std::string filename) {
   }
 }
 
-std::vector<Geometry::BSSurface> QuadFit::fit() {
-  return {};
+std::vector<BSSurface> QuadFit::fit() {
+  std::vector<BSSurface> result(quads.size());
+
+  for (size_t i = 0; i < quads.size(); ++i) {
+    auto &b = quads[i].boundaries;
+    PointVector cpts(16);
+    for (size_t j = 0; j < 4; ++j) {
+      auto getCP = [&](size_t k) {
+        size_t j1 = b[k].reversed ? 3 - j : j;
+        return segments[b[k].segment].controlPoints()[j1];
+      };
+      cpts[j] = getCP(0);
+      cpts[j*4] = getCP(1);
+      cpts[12+j] = getCP(2);
+      cpts[3+j*4] = getCP(3);
+    }
+    auto setTwist = [&](size_t p, size_t d1, size_t d2, size_t t) {
+      cpts[t] = cpts[d1] + (cpts[d2] - cpts[p]);
+    };
+    setTwist(0, 1, 4, 5);
+    setTwist(3, 2, 7, 6);
+    setTwist(12, 8, 13, 9);
+    setTwist(15, 11, 14, 10);
+    result[i] = BSSurface(3, 3, cpts);
+  }
+
+  return result;
 }

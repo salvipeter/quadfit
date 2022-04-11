@@ -6,7 +6,7 @@ public:
   std::vector<Geometry::BSSurface> fit();
 
 private:
-  using Ribbon = std::array<Geometry::BSCurve, 2>;
+  using Ribbon = std::array<Geometry::BSCurve, 2>; // outer, inner
   struct Quad {
     struct Boundary {
       size_t segment;
@@ -20,7 +20,6 @@ private:
     std::vector<Geometry::Point3D> samples;
   };
 
-  size_t n;
   std::vector<Ribbon> ribbons;
   std::vector<Geometry::BSCurve> segments;
   std::vector<Quad> quads;

@@ -49,7 +49,8 @@ EOF
 # Curves are described as:
 
 <degree>
-<number of knots>
-<knot values>
+<number of knots> <knot values: u1 u2 ...>
 <number of control points>
-<control points: x1 y1 z1 x2 y2 ...>
+<control points 1: x1 y1 z1>
+<control points 2: x2 y2 z2>
+...

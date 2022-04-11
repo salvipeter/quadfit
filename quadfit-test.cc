@@ -78,6 +78,27 @@ void writeControlNet(const std::vector<BSSurface> &surfaces, std::string filenam
   }
 }
 
+void writeBoundaries(const std::vector<BSSurface> &surfaces, std::string filename,
+                     size_t resolution) {
+  std::ofstream f(filename);
+  for (size_t n = 0; n < surfaces.size(); ++n) {
+    const auto &s = surfaces[n];
+    for (size_t i = 0; i <= resolution; ++i) {
+      double t = (double)i / resolution;
+      f << "v " << s.eval(0, t) << std::endl;
+      f << "v " << s.eval(t, 0) << std::endl;
+      f << "v " << s.eval(1, t) << std::endl;
+      f << "v " << s.eval(t, 1) << std::endl;
+    }
+    for (size_t j = 0; j < 4; ++j) {
+      f << "l";
+      for (size_t k = 0; k <= resolution; ++k)
+        f << ' ' << 1 + (resolution + 1) * 4 * n + 4 * k + j;
+      f << std::endl;
+    }
+  }
+}
+
 int main(int argc, char **argv) {
   if (argc < 2) {
     std::cerr << "Usage: " << argv[0] << " <input.pwgb> [resolution]" << std::endl;
@@ -96,7 +117,10 @@ int main(int argc, char **argv) {
   std::cout << "Fit of " << surfaces.size() << " surfaces completed" << std::endl;
 
   std::cout << "Output resolution: " << resolution << std::endl;
-  writeSTL(surfaces, "/tmp/quads.stl", resolution);
-  writeControlNet(surfaces, "/tmp/quads.obj");
-  std::cout << "Mesh written to /tmp/quads.stl; control points to /tmp/quads.obj" << std::endl;
+  writeSTL(surfaces, "/tmp/surfaces.stl", resolution);
+  writeControlNet(surfaces, "/tmp/controls.obj");
+  writeBoundaries(surfaces, "/tmp/boundaries.obj", resolution);
+  std::cout << "Surfaces written to /tmp/surfaces.stl" << std::endl;
+  std::cout << "Control nets written to /tmp/controls.obj" << std::endl;
+  std::cout << "Boundaries written to /tmp/boundaries.obj" << std::endl;
 }

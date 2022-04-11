@@ -21,6 +21,8 @@ PWGB File Format
 #     Negative indices show direction reversal
 #   There are also references to the ribbon curves
 #     0 index means the side is not on a ribbon
+#   Intervals reflect the quad's orientation:
+#     i.e., s_min > s_max if the ribbon's direction is reversed
 <number of quads>
 <Quad 1 u=0 segment index> <Quad 1 u=0 ribbon index> [interval if index != 0: s_min s_max]
 <Quad 1 v=0 segment index> <Quad 1 v=0 ribbon index> [interval if index != 0: s_min s_max]

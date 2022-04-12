@@ -1,3 +1,5 @@
+#include <set>
+
 #include <geometry.hh>
 
 class QuadFit {
@@ -6,6 +8,9 @@ public:
   std::vector<Geometry::BSSurface> fit();
 
 private:
+  Geometry::Matrix3x3 fitCurvature(const Geometry::Point3D &p,
+                                   const std::set<size_t> &quad_indices) const;
+
   using Ribbon = std::array<Geometry::BSCurve, 2>; // outer, inner
   struct Quad {
     struct Boundary {

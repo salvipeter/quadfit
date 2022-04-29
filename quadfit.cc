@@ -239,10 +239,10 @@ std::vector<BSSurface> QuadFit::fit() {
 
   // Fit vertex curvatures
 
-  curvatures.resize(vertices.size());
-  for (size_t i = 0; i < vertices.size(); ++i)
-    curvatures[i] = fitCurvature(vertices[i], quad_indices[i]);
-  writeVertexCurvatures(vertices, curvatures, "/tmp/curvatures.vtk");
+  //  curvatures.resize(vertices.size());
+  //  for (size_t i = 0; i < vertices.size(); ++i)
+  //    curvatures[i] = fitCurvature(vertices[i], quad_indices[i]);
+  //  writeVertexCurvatures(vertices, curvatures, "/tmp/curvatures.vtk");
 
   // Simple C0 fit
 
@@ -251,7 +251,14 @@ std::vector<BSSurface> QuadFit::fit() {
     PointVector cpts(16);
     for (size_t j = 0; j < 4; ++j) {
       auto getCP = [&](size_t k) {
-        size_t j1 = b[k].reversed ? 3 - j : j;
+        bool rev = b[k].reversed;
+        size_t j1 = j;
+        if (j1 > 1) {
+          rev = !rev;
+          j1 = 3 - j1;
+        }
+        if (rev)
+          return segments[b[k].segment].controlPoints().rbegin()[j1];
         return segments[b[k].segment].controlPoints()[j1];
       };
       cpts[j] = getCP(0);

@@ -250,7 +250,8 @@ std::vector<BSSurface> QuadFit::fit() {
     all_points.insert(all_points.end(), q.samples.begin(), q.samples.end());
   auto jet = JetWrapper::fit(vertices, JetWrapper::Nearest(all_points));
   // TODO: these should be fixed at non-corner ribbon vertices
-  writeVertexCurvatures(vertices, jet, "/tmp/curvatures.vtk");
+
+  writeVertexCurvatures(vertices, jet, "/tmp/curvatures.vtk"); // (just for debugging)
 
   // 1. Simple C0 fit
   // - cubic Bezier surfaces
@@ -290,6 +291,31 @@ std::vector<BSSurface> QuadFit::fit() {
   }
 
   // 3. Compute better twists
+  constexpr std::array<size_t, 16> corner_cps =
+    { 0, 1, 4, 5, 12, 8, 13, 9, 15, 14, 11, 10, 3, 7, 2, 6 };
+  for (size_t i = 0; i < quads.size(); ++i) {
+    auto &cpts = result[i].controlPoints();
+    for (size_t side = 0; side < 4; ++side) {
+      size_t p = corner_cps[4*side], t1 = corner_cps[4*side+1];
+      size_t t2 = corner_cps[4*side+2], tw = corner_cps[4*side+3];
+      const auto &b = quads[i].boundaries[side];
+      const auto &bn = quads[i].boundaries[(side+1)%4];
+      if (b.on_ribbon && bn.on_ribbon) {
+        VectorVector der0, der1;
+        if (side == 0 || side == 3) {
+          ribbons[b.ribbon][0].eval(b.s_min, 1, der0);
+          ribbons[b.ribbon][1].eval(b.s_min, 1, der1);
+        } else {
+          ribbons[b.ribbon][0].eval(b.s_max, 1, der0);
+          ribbons[b.ribbon][1].eval(b.s_max, 1, der1);
+        }
+        auto twist = (der1[1] - der0[1]) * (b.s_max - b.s_min);
+        cpts[tw] = twist / 9 - cpts[p] + cpts[t1] + cpts[t2];
+      } else {
+        // TODO
+      }
+    }
+  }
 
   // 4. Degree elevation to sextic
   for (auto &s : result)

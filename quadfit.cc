@@ -125,9 +125,94 @@ static void writeVertexCurvatures(const std::vector<Point3D> &vertices,
   }
 }
 
-std::vector<BSSurface> QuadFit::fit() {
+std::vector<BSSurface> QuadFit::initialFit() const {
   std::vector<BSSurface> result(quads.size());
 
+  for (size_t i = 0; i < quads.size(); ++i) {
+    auto &b = quads[i].boundaries;
+    PointVector cpts(16);
+    for (size_t j = 0; j < 4; ++j) {
+      auto getCP = [&](size_t k) {
+        const auto &curve = segments[b[k].segment];
+        bool rev = (b[k].reversed && j < 2) || (!b[k].reversed && j >= 2);
+        bool deriv = j == 1 || j == 2;
+        double u = rev ? curve.basis().high() : curve.basis().low();
+        VectorVector der;
+        auto p = curve.eval(u, deriv ? 1 : 0, der);
+        if (deriv)
+          return p + der[1] / 3 * (rev ? -1 : 1);
+        return p;
+      };
+      cpts[j] = getCP(0);
+      cpts[j*4] = getCP(1);
+      cpts[12+j] = getCP(2);
+      cpts[3+j*4] = getCP(3);
+    }
+    auto setTwist = [&](size_t p, size_t d1, size_t d2, size_t t) {
+      cpts[t] = cpts[d1] + (cpts[d2] - cpts[p]);
+    };
+    setTwist(0, 1, 4, 5);
+    setTwist(3, 2, 7, 6);
+    setTwist(12, 8, 13, 9);
+    setTwist(15, 11, 14, 10);
+    result[i] = BSSurface(3, 3, cpts);
+  }
+
+  return result;
+}
+
+static BSSurface elevateBezierU(const BSSurface &surface) {
+  size_t du = surface.basisU().degree();
+  size_t dv = surface.basisV().degree();
+  const auto &old = surface.controlPoints();
+  PointVector cpts((du + 2) * (dv + 1));
+  size_t index = 0;
+  for (size_t i = 0; i <= du + 1; ++i)
+    for (size_t j = 0; j <= dv; ++j) {
+      if (i == 0)
+        cpts[index] = old[index];
+      else if (i > du)
+        cpts[index] = old[index-dv-1];
+      else {
+        double alpha = (double)i / (du + 1);
+        cpts[index] = old[index] * (1 - alpha) + old[index-dv-1] * alpha;
+      }
+      index++;
+    }
+  return { du + 1, dv, cpts };
+}
+
+static BSSurface elevateBezierV(const BSSurface &surface) {
+  size_t du = surface.basisU().degree();
+  size_t dv = surface.basisV().degree();
+  const auto &old = surface.controlPoints();
+  PointVector cpts((du + 1) * (dv + 2));
+  size_t index = 0;
+  for (size_t i = 0; i <= du; ++i)
+    for (size_t j = 0; j <= dv + 1; ++j) {
+      if (j == 0)
+        cpts[index] = old[index-i];
+      else if (j > dv)
+        cpts[index] = old[index-i-1];
+      else {
+        double alpha = (double)j / (dv + 1);
+        cpts[index] = old[index-i] * (1 - alpha) + old[index-i-1] * alpha;
+      }
+      index++;
+    }
+  return { du, dv + 1, cpts };
+}
+
+static BSSurface elevateBezier(const BSSurface &surface, size_t target) {
+  BSSurface result = surface;
+  while (result.basisU().degree() < target)
+    result = elevateBezierU(result);
+  while (result.basisV().degree() < target)
+    result = elevateBezierV(result);
+  return result;
+}
+
+std::vector<BSSurface> QuadFit::fit() {
   // Topology & geometry structures
   std::vector<Point3D> vertices;
   std::vector<std::set<size_t>> quad_indices;       // vertex -> quads
@@ -162,37 +247,31 @@ std::vector<BSSurface> QuadFit::fit() {
   auto jet = JetWrapper::fit(vertices, JetWrapper::Nearest(all_points));
   writeVertexCurvatures(vertices, jet, "/tmp/curvatures.vtk");
 
-  // Simple C0 fit
+  // 1. Simple C0 fit
+  // - cubic Bezier surfaces
+  // - boundaries by the boundary curve endpoints & derivatives
+  // - twists by parallelogram rule
+  auto result = initialFit();
 
-  for (size_t i = 0; i < quads.size(); ++i) {
-    auto &b = quads[i].boundaries;
-    PointVector cpts(16);
-    for (size_t j = 0; j < 4; ++j) {
-      auto getCP = [&](size_t k) {
-        const auto &curve = segments[b[k].segment];
-        bool rev = (b[k].reversed && j < 2) || (!b[k].reversed && j >= 2);
-        bool deriv = j == 1 || j == 2;
-        double u = rev ? curve.basis().high() : curve.basis().low();
-        VectorVector der;
-        auto p = curve.eval(u, deriv ? 1 : 0, der);
-        if (deriv)
-          return p + der[1] / 3 * (rev ? -1 : 1);
-        return p;
-      };
-      cpts[j] = getCP(0);
-      cpts[j*4] = getCP(1);
-      cpts[12+j] = getCP(2);
-      cpts[3+j*4] = getCP(3);
-    }
-    auto setTwist = [&](size_t p, size_t d1, size_t d2, size_t t) {
-      cpts[t] = cpts[d1] + (cpts[d2] - cpts[p]);
-    };
-    setTwist(0, 1, 4, 5);
-    setTwist(3, 2, 7, 6);
-    setTwist(12, 8, 13, 9);
-    setTwist(15, 11, 14, 10);
-    result[i] = BSSurface(3, 3, cpts);
-  }
+  // 2. Compute better tangents
+  // - by the ribbons where available
+  // - projected to the vertices' normal plane
+
+  // 3. Compute better twists
+
+  // 4. Degree elevation to sextic
+  for (auto &s : result)
+    s = elevateBezier(s, 6);
+
+  // 5. Compute better curvatures
+
+  // 6. Fit sampled points using inner control points
+
+  // 7. Set G1 continuity by direction blends
+
+  // 8. Insert knots & refine boundaries
+
+  // 9. Re-fit inner control points
 
   return result;
 }

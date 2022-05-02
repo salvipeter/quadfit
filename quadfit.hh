@@ -8,6 +8,7 @@ public:
   std::vector<Geometry::BSSurface> fit();
 
 private:
+  std::vector<Geometry::BSSurface> initialFit() const;
 
   using Ribbon = std::array<Geometry::BSCurve, 2>; // outer, inner
   struct Quad {

@@ -1,7 +1,8 @@
 # quadfit
 Fit continuously connected B-spline surfaces on sampled points with boundary constraints.
 
-Uses my [geometry library](https://github.com/salvipeter/libgeom/).
+Uses my [geometry library](https://github.com/salvipeter/libgeom/),
+and my [jet-fitting wrapper](https://github.com/salvipeter/jet-wrapper/) on CGAL.
 
 Requires:
 - A curve network (given as B-spline curves)

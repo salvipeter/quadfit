@@ -139,8 +139,10 @@ std::vector<BSSurface> QuadFit::initialFit() const {
         double u = rev ? curve.basis().high() : curve.basis().low();
         VectorVector der;
         auto p = curve.eval(u, deriv ? 1 : 0, der);
-        if (deriv)
-          return p + der[1] / 3 * (rev ? -1 : 1);
+        if (deriv) {
+          double interval = curve.basis().high() - curve.basis().low();
+          return p + der[1] / 3 * (rev ? -1 : 1) * interval;
+        }
         return p;
       };
       cpts[j] = getCP(0);
@@ -240,11 +242,12 @@ std::vector<BSSurface> QuadFit::fit() {
       quad_indices[endpoints[s].second].insert(i);
     }
 
-  // Fit vertex curvatures
+  // 0. Fit vertex curvatures
   PointVector all_points;
   for (const auto &q : quads)
     all_points.insert(all_points.end(), q.samples.begin(), q.samples.end());
   auto jet = JetWrapper::fit(vertices, JetWrapper::Nearest(all_points));
+  // TODO: these should be fixed at non-corner ribbon vertices
   writeVertexCurvatures(vertices, jet, "/tmp/curvatures.vtk");
 
   // 1. Simple C0 fit
@@ -256,6 +259,33 @@ std::vector<BSSurface> QuadFit::fit() {
   // 2. Compute better tangents
   // - by the ribbons where available
   // - projected to the vertices' normal plane
+  constexpr std::array<size_t, 8> vertex_cps = { 0, 3, 0, 12, 12, 15, 3, 15 };
+  constexpr std::array<size_t, 8> tangent_cps = { 1, 2, 4, 8, 13, 14, 7, 11 };
+  for (size_t i = 0; i < quads.size(); ++i) {
+    auto &cpts = result[i].controlPoints();
+    for (size_t side = 0; side < 4; ++side) {
+      const auto &b = quads[i].boundaries[side];
+      if (b.on_ribbon) {
+        const auto &curve = ribbons[b.ribbon][0];
+        auto matchRibbon = [&](size_t v, size_t t, double interval, const Vector3D &d) {
+          cpts[t] = cpts[v] + d / 3 * interval;
+        };
+        VectorVector der;
+        curve.eval(b.s_min, 1, der);
+        matchRibbon(vertex_cps[2*side], tangent_cps[2*side], b.s_max - b.s_min, der[1]);
+        curve.eval(b.s_max, 1, der);
+        matchRibbon(vertex_cps[2*side+1], tangent_cps[2*side+1], b.s_max - b.s_min, -der[1]);
+      } else {
+        auto projectToPlane = [&](size_t v, size_t t, const Vector3D &n) {
+          cpts[t] += n * (n * (cpts[v] - cpts[t]));
+        };
+        const auto &n1 = jet[endpoints[b.segment].first].normal;
+        const auto &n2 = jet[endpoints[b.segment].second].normal;
+        projectToPlane(vertex_cps[2*side], tangent_cps[2*side], b.reversed ? n2 : n1);
+        projectToPlane(vertex_cps[2*side+1], tangent_cps[2*side+1], b.reversed ? n1 : n2);
+      }
+    }
+  }
 
   // 3. Compute better twists
 

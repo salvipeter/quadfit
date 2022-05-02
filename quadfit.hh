@@ -8,8 +8,6 @@ public:
   std::vector<Geometry::BSSurface> fit();
 
 private:
-  std::vector<Geometry::BSSurface> initialFit() const;
-
   using Ribbon = std::array<Geometry::BSCurve, 2>; // outer, inner
   struct Quad {
     struct Boundary {
@@ -23,6 +21,8 @@ private:
     size_t resolution;
     std::vector<Geometry::Point3D> samples;
   };
+
+  std::vector<Geometry::BSSurface> initialFit() const;
 
   std::vector<Ribbon> ribbons;
   std::vector<Geometry::BSCurve> segments;

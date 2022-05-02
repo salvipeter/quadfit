@@ -1,3 +1,5 @@
+#pragma once
+
 #include <set>
 
 #include <geometry.hh>
@@ -19,7 +21,7 @@ private:
     };
     std::array<Boundary, 4> boundaries; // u=0, v=0, u=1, v=1
     size_t resolution;
-    std::vector<Geometry::Point3D> samples;
+    Geometry::PointVector samples;
   };
 
   std::vector<Geometry::BSSurface> initialFit() const;

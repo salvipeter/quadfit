@@ -5,6 +5,8 @@
 
 #include "quadfit.hh"
 
+#include "bspline-fit.hh"
+
 using namespace Geometry;
 using JetWrapper::JetData;
 
@@ -296,6 +298,11 @@ std::vector<BSSurface> QuadFit::fit() {
   // 5. Compute better curvatures
 
   // 6. Fit sampled points using inner control points
+  auto fixC0Twist = [](size_t i, size_t j) {
+    return i == 0 || j == 0 || i == 6 || j == 6 || ((i == 1 || i == 5) && (j == 1 || j == 5));
+  };
+  for (size_t i = 0; i < quads.size(); ++i)
+    bsplineFit(result[i], quads[i].resolution, quads[i].samples, fixC0Twist, 0.1);
 
   // 7. Set G1 continuity by direction blends
 

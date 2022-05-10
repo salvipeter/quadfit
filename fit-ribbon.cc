@@ -4,7 +4,51 @@
 
 #include <geometry.hh>
 
+#include <Eigen/Dense>
+
 using namespace Geometry;
+
+BSCurve interpolateWithZeroTangents(const Point2DVector &values) {
+  size_t n = values.size() - 1;
+  size_t m = n + 2;
+  DoubleVector u; u.reserve(n + 1);
+  for (const auto &v : values)
+    u.push_back(v[0]);
+
+  DoubleVector knots;
+
+  std::fill_n(std::back_inserter(knots), 3, u.front());
+  for (const auto &v : values)
+    knots.push_back(v[0]);
+  std::fill_n(std::back_inserter(knots), 3, u.back());
+
+  BSBasis basis(3, knots);
+
+  Eigen::MatrixXd A(n + 3, n + 3); A.setZero();
+  for (size_t i = 0; i <= n; ++i) {
+    size_t span = basis.findSpan(u[i]);
+    DoubleVector coeff; basis.basisFunctions(span, u[i], coeff);
+    for (size_t j = 0; j <= 3; ++j)
+      A(i, span - 3 + j) = coeff[j];
+  }
+  A(n + 1, 1) = 1.0;
+  A(n + 2, m - 1) = 1.0;
+
+  Eigen::VectorXd b(n + 3);
+  for (size_t i = 0; i <= n; ++i)
+    b(i) = values[i][1];
+  b(n + 1) = values.front()[1];
+  b(n + 2) = values.back()[1];
+
+  Eigen::VectorXd x;
+  x = A.fullPivLu().solve(b);
+
+  PointVector cpts;
+  for (size_t i = 0; i <= m; ++i)
+    cpts.emplace_back(x(i), 0, 0);
+
+  return { 3, knots, cpts };
+}
 
 BSSurface splitU(BSSurface surface, double from, double to) {
   size_t p = surface.basisU().degree();
@@ -24,8 +68,14 @@ BSSurface splitU(BSSurface surface, double from, double to) {
   return { p, surface.basisV().degree(), slice_knots, surface.basisV().knots(), cpts };
 }
 
+BSSurface multiplySurfaceWithFunction(const BSSurface &surface, const BSCurve &function) {
+  // TODO
+  return surface;
+}
+
 std::vector<BSSurface> fitSlices(const BSSurface &ribbon, const Point2DVector &sh) {
-  BSSurface sextic = ribbon;
+  auto alpha = interpolateWithZeroTangents(sh);
+  BSSurface sextic = multiplySurfaceWithFunction(ribbon, alpha);
   std::vector<BSSurface> result;
   for (size_t i = 1; i < sh.size(); ++i)
     result.push_back(splitU(sextic, sh[i-1][0], sh[i][0]));

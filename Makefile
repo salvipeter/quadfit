@@ -1,4 +1,4 @@
-all: quadfit-test
+all: quadfit-test ribbon-test
 
 EIGEN=/usr/include/eigen3
 LIBGEOM=../libgeom
@@ -9,3 +9,6 @@ LDFLAGS=-L$(LIBGEOM)/debug -lgeom -lomp
 
 quadfit-test: quadfit-test.o quadfit.o bspline-fit.o $(JETWRAP)/jet-wrapper.o
 	$(CXX) -o $@ $^ $(LDFLAGS)
+
+ribbon-test: fit-ribbon.o
+	$(CXX) -o $@ $< $(LDFLAGS)

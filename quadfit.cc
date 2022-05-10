@@ -352,6 +352,7 @@ std::vector<BSSurface> QuadFit::fit() {
   for (auto &s : result)
     s = elevateBezier(s, 6);
 
+  return result;
   // 5. Compute better curvatures
 
   // 6. Fit sampled points using inner control points

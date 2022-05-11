@@ -122,12 +122,12 @@ BSBasis combineBases(const BSBasis &basis1, const BSBasis &basis2) {
   std::fill_n(std::back_inserter(knots), d + 1, knots1.front());
   size_t i1 = d1 + 1, i2 = d2 + 1;
   while (i1 < n1 || i2 < n2) {
-    if (knots1[i1] < knots[i2]) {
+    if (knots1[i1] < knots2[i2]) {
       double k = knots1[i1];
       size_t m = 0;
       while (knots1[i1] == k) { m++; i1++; }
       std::fill_n(std::back_inserter(knots), m + d2, k);
-    } else if (knots1[i2] < knots[i1]) {
+    } else if (knots2[i2] < knots1[i1]) {
       double k = knots2[i2];
       size_t m = 0;
       while (knots2[i2] == k) { m++; i2++; }
@@ -164,7 +164,7 @@ BSSurface multiplySurfaceWithFunction(const BSSurface &surface, const BSCurve &f
   auto h2 = [&](double u) {
     VectorMatrix der;
     surface.eval(u, 0.0, 1, der);
-    return der[1][0] * function.eval(u)[0];
+    return der[0][1] * function.eval(u)[0];
   };
   const auto &knots = basis.knots();
   DoubleVector intervals = { knots.front() };

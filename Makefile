@@ -1,4 +1,4 @@
-all: quadfit-test ribbon-test
+all: quadfit-test ribbon-test connect-test
 
 EIGEN=/usr/include/eigen3
 LIBGEOM=../libgeom
@@ -11,4 +11,7 @@ quadfit-test: quadfit-test.o quadfit.o bspline-fit.o $(JETWRAP)/jet-wrapper.o
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
 ribbon-test: fit-ribbon.o
+	$(CXX) -o $@ $< $(LDFLAGS)
+
+connect-test: connect-g1.o
 	$(CXX) -o $@ $< $(LDFLAGS)

@@ -25,13 +25,13 @@ PWGB File Format
 #   There are also references to the ribbon curves
 #     0 index means the side is not on a ribbon
 #   Intervals reflect the quad's orientation:
-#     i.e., s_min > s_max if the ribbon's direction is reversed
+#     i.e., s0 > s1 if the ribbon's direction is reversed
 <number of quads>
-<Quad 1 u=0 segment index> <Quad 1 u=0 ribbon index> [interval if index != 0: s_min s_max]
-<Quad 1 v=0 segment index> <Quad 1 v=0 ribbon index> [interval if index != 0: s_min s_max]
-<Quad 1 u=1 segment index> <Quad 1 u=1 ribbon index> [interval if index != 0: s_min s_max]
-<Quad 1 v=1 segment index> <Quad 1 v=1 ribbon index> [interval if index != 0: s_min s_max]
-<Quad 2 u=0 segment index> <Quad 2 u=0 ribbon index> [interval if index != 0: s_min s_max]
+<Quad 1 u=0 segment index> <Quad 1 u=0 ribbon index> [interval if index != 0: s0 s1 h0 h1]
+<Quad 1 v=0 segment index> <Quad 1 v=0 ribbon index> [interval if index != 0: s0 s1 h0 h1]
+<Quad 1 u=1 segment index> <Quad 1 u=1 ribbon index> [interval if index != 0: s0 s1 h0 h1]
+<Quad 1 v=1 segment index> <Quad 1 v=1 ribbon index> [interval if index != 0: s0 s1 h0 h1]
+<Quad 2 u=0 segment index> <Quad 2 u=0 ribbon index> [interval if index != 0: s0 s1 h0 h1]
 ...
 
 # Fourth part - sampled points

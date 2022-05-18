@@ -7,11 +7,11 @@ JETWRAP=../jet-wrapper
 CXXFLAGS=-Wall -pedantic -std=c++17 -O0 -g -I$(LIBGEOM) -I$(JETWRAP) -I$(EIGEN)
 LDFLAGS=-L$(LIBGEOM)/debug -lgeom -lomp
 
-quadfit-test: quadfit-test.o quadfit.o bspline-fit.o $(JETWRAP)/jet-wrapper.o
+quadfit-test: quadfit-test.o quadfit.o bspline-fit.o io.o $(JETWRAP)/jet-wrapper.o
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
-ribbon-test: fit-ribbon.o
-	$(CXX) -o $@ $< $(LDFLAGS)
+ribbon-test: fit-ribbon.o io.o
+	$(CXX) -o $@ $^ $(LDFLAGS)
 
-connect-test: connect-g1.o
-	$(CXX) -o $@ $< $(LDFLAGS)
+connect-test: connect-g1.o io.o
+	$(CXX) -o $@ $^ $(LDFLAGS)

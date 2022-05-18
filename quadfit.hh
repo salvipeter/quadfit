@@ -16,8 +16,8 @@ private:
       size_t segment;
       bool reversed;
       bool on_ribbon;
-      size_t ribbon;       // when on_ribbon
-      double s_min, s_max; //   is true
+      size_t ribbon;         // when on_ribbon
+      double s0, s1, h0, h1; //   is true
     };
     std::array<Boundary, 4> boundaries; // u=0, v=0, u=1, v=1
     size_t resolution;

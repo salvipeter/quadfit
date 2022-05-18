@@ -69,7 +69,7 @@ std::string QuadFit::readPWGB(std::string filename) {
       b.on_ribbon = r != 0;
       if (r > 0) {
         b.ribbon = r - 1;
-        f >> b.s_min >> b.s_max;
+        f >> b.s0 >> b.s1 >> b.h0 >> b.h1;
       }
     }
   }
@@ -277,10 +277,10 @@ std::vector<BSSurface> QuadFit::fit() {
       };
       VectorVector der;
       if (b.on_ribbon) {
-        curve.eval(b.s_min, 1, der);
-        matchRibbon(vertex_cps[2*side], tangent_cps[2*side], b.s_max - b.s_min, der[1]);
-        curve.eval(b.s_max, 1, der);
-        matchRibbon(vertex_cps[2*side+1], tangent_cps[2*side+1], b.s_max - b.s_min, -der[1]);
+        curve.eval(b.s0, 1, der);
+        matchRibbon(vertex_cps[2*side], tangent_cps[2*side], b.s1 - b.s0, der[1]);
+        curve.eval(b.s1, 1, der);
+        matchRibbon(vertex_cps[2*side+1], tangent_cps[2*side+1], b.s1 - b.s0, -der[1]);
       } else {
         auto projectToPlane = [&](size_t v, size_t t, const Vector3D &n) {
           cpts[t] += n * (n * (cpts[v] - cpts[t]));
@@ -296,10 +296,10 @@ std::vector<BSSurface> QuadFit::fit() {
           Point3D p;
           if (side < 2) {
             const auto &B = side == 0 ? bn : bp;
-            p = ribbons[B.ribbon][1].eval(B.s_min);
+            p = ribbons[B.ribbon][1].eval(B.s0);
           } else {
             const auto &B = side == 3 ? bn : bp;
-            p = ribbons[B.ribbon][1].eval(B.s_max);
+            p = ribbons[B.ribbon][1].eval(B.s1);
           }
           cpts[tangent_cps[2*side]] = v + (p - v).normalized() * (t - v).norm(); // or: p
         } else
@@ -309,10 +309,10 @@ std::vector<BSSurface> QuadFit::fit() {
           Point3D p;
           if (side < 2) {
             const auto &B = side == 1 ? bn : bp;
-            p = ribbons[B.ribbon][1].eval(B.s_min);
+            p = ribbons[B.ribbon][1].eval(B.s0);
           } else {
             const auto &B = side == 2 ? bn : bp;
-            p = ribbons[B.ribbon][1].eval(B.s_max);
+            p = ribbons[B.ribbon][1].eval(B.s1);
           }
           cpts[tangent_cps[2*side+1]] = v + (p - v).normalized() * (t - v).norm(); // or: p
         } else
@@ -334,13 +334,13 @@ std::vector<BSSurface> QuadFit::fit() {
       if (b.on_ribbon && bn.on_ribbon) {
         VectorVector der0, der1;
         if (side == 0 || side == 3) {
-          ribbons[b.ribbon][0].eval(b.s_min, 1, der0);
-          ribbons[b.ribbon][1].eval(b.s_min, 1, der1);
+          ribbons[b.ribbon][0].eval(b.s0, 1, der0);
+          ribbons[b.ribbon][1].eval(b.s0, 1, der1);
         } else {
-          ribbons[b.ribbon][0].eval(b.s_max, 1, der0);
-          ribbons[b.ribbon][1].eval(b.s_max, 1, der1);
+          ribbons[b.ribbon][0].eval(b.s1, 1, der0);
+          ribbons[b.ribbon][1].eval(b.s1, 1, der1);
         }
-        auto twist = (der1[1] - der0[1]) * (b.s_max - b.s_min);
+        auto twist = (der1[1] - der0[1]) * (b.s1 - b.s0);
         cpts[tw] = twist / 9 - cpts[p] + cpts[t1] + cpts[t2];
       } else {
         // TODO

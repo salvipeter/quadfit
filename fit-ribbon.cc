@@ -1,17 +1,14 @@
 #include <algorithm>
-#include <fstream>
 #include <functional>
 #include <iterator>
 
-#include <geometry.hh>
-
 #include <Eigen/Dense>
 
-#include "io.hh"
+#include "fit-ribbon.hh"
 
 using namespace Geometry;
 
-BSCurve interpolateWithZeroTangents(const Point2DVector &values) {
+static BSCurve interpolateWithZeroTangents(const Point2DVector &values) {
   size_t n = values.size() - 1;
   size_t m = n + 2;
   DoubleVector u; u.reserve(n + 1);
@@ -53,7 +50,7 @@ BSCurve interpolateWithZeroTangents(const Point2DVector &values) {
   return { 3, knots, cpts };
 }
 
-BSSurface splitU(BSSurface surface, double from, double to) {
+static BSSurface splitU(BSSurface surface, double from, double to) {
   size_t p = surface.basisU().degree();
   surface = surface.insertKnotU(from, p);
   surface = surface.insertKnotU(to, p);
@@ -99,8 +96,9 @@ static const DoubleMatrix newton_cotes =
       -9.79806765, 6.79798678, -1.44386357, 1.88443328,
       0.25967385 },
   };
-double integrate(const std::function<double(double)> &f, const DoubleVector &intervals,
-                 size_t degree) {
+static double integrate(const std::function<double(double)> &f,
+                        const DoubleVector &intervals,
+                        size_t degree) {
   double result = 0;
   size_t n = std::min(12, std::max(1, (int)degree - 1));
   for (size_t i = 1; i < intervals.size(); ++i) {
@@ -113,7 +111,7 @@ double integrate(const std::function<double(double)> &f, const DoubleVector &int
   return result;
 }
 
-BSBasis combineBases(const BSBasis &basis1, const BSBasis &basis2) {
+static BSBasis combineBases(const BSBasis &basis1, const BSBasis &basis2) {
   size_t d1 = basis1.degree();
   size_t d2 = basis2.degree();
   size_t d = d1 + d2;
@@ -146,7 +144,8 @@ BSBasis combineBases(const BSBasis &basis1, const BSBasis &basis2) {
   return { d, knots };
 }
 
-BSSurface multiplySurfaceWithFunction(const BSSurface &surface, const BSCurve &function) {
+static BSSurface multiplySurfaceWithFunction(const BSSurface &surface,
+                                             const BSCurve &function) {
   // This is a very special interpretation of multiplication:
   // the first v-derivatives of the surface are multiplied by the x-coordinates of the curve.
   // The surface is assumed to be linear in v, and also they have the same parametric interval.
@@ -201,26 +200,4 @@ std::vector<BSSurface> fitSlices(const BSSurface &ribbon, const Point2DVector &s
     result.push_back(splitU(sextic, sh[i-1][0], sh[i][0]));
   
   return result;
-}
-
-
-// Testing
-
-int main(int argc, char **argv) {
-  BSSurface ribbon(3, 1, { 0, 0, 0, 0, 0.3, 0.5, 0.6, 1, 1, 1, 1 }, { 0, 0, 1, 1 },
-                   { { 0, 0, 0 }, { 0, 4, 1 },
-                     { 3, 1, 1 }, { 4, 5, 2 },
-                     { 7, 2, 1 }, { 8, 5, 1 },
-                     {10, 2, 2 }, {11, 6, 1 },
-                     {14, 0, 1 }, {16, 4, 2 },
-                     {17, 0, 0 }, {18, 4, 1 },
-                     {20, 2, 1 }, {21, 5, 2 } });
-  Point2DVector sh = { { 0, 0.5 }, { 0.3, 0.6 }, { 0.4, 0.7 }, { 1, 0.9 } };
-  size_t resolution = 50;
-  auto surfaces = fitSlices(ribbon, sh);
-  writeSTL({ ribbon }, "/tmp/ribbon.stl", resolution);
-  writeControlNet({ ribbon }, "/tmp/ribbon-controls.obj");
-  writeSTL(surfaces, "/tmp/surfaces.stl", resolution);
-  writeControlNet(surfaces, "/tmp/controls.obj");
-  writeBoundaries(surfaces, "/tmp/boundaries.obj", resolution);
 }

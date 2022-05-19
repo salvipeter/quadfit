@@ -207,6 +207,7 @@ static BSSurface elevateBezierV(const BSSurface &surface) {
   return { du, dv + 1, cpts };
 }
 
+[[maybe_unused]]
 static BSSurface elevateBezier(const BSSurface &surface, size_t target) {
   BSSurface result = surface;
   while (result.basisU().degree() < target)
@@ -244,6 +245,7 @@ std::vector<BSSurface> QuadFit::fit() {
       quad_indices[endpoints[s].second].insert(i);
     }
 
+
   // 0. Fit vertex curvatures
   PointVector all_points;
   for (const auto &q : quads)
@@ -253,15 +255,19 @@ std::vector<BSSurface> QuadFit::fit() {
 
   writeVertexCurvatures(vertices, jet, "/tmp/curvatures.vtk"); // (just for debugging)
 
+
   // 1. Simple C0 fit
   // - cubic Bezier surfaces
   // - boundaries by the boundary curve endpoints & derivatives
   // - twists by parallelogram rule
   auto result = initialFit();
 
-  // 2. Compute better tangents
-  // - by the ribbons where available
-  // - at T-nodes: retain original P0-P1 length
+
+  // 2. Fit ribbons
+
+
+  // 3. Compute better first derivatives for the quad boundary curves
+  // - by the fitted ribbons where available
   // - in the interior: project to the vertices' normal plane
   constexpr std::array<size_t, 8> vertex_cps = { 0, 3, 0, 12, 12, 15, 3, 15 };
   constexpr std::array<size_t, 8> tangent_cps = { 1, 2, 4, 8, 13, 14, 7, 11 };
@@ -321,7 +327,11 @@ std::vector<BSSurface> QuadFit::fit() {
     }
   }
 
-  // 3. Compute better twists
+
+  // 4. Compute better second derivatives for the quad boundary curves
+
+
+  // 5. Compute twist vectors
   constexpr std::array<size_t, 16> corner_cps =
     { 0, 1, 4, 5, 12, 8, 13, 9, 15, 14, 11, 10, 3, 7, 2, 6 };
   for (size_t i = 0; i < quads.size(); ++i) {
@@ -348,25 +358,16 @@ std::vector<BSSurface> QuadFit::fit() {
     }
   }
 
-  // 4. Degree elevation to sextic
-  for (auto &s : result)
-    s = elevateBezier(s, 6);
+
+  // 6. Compute inner boundary ribbons
 
-  return result;
-  // 5. Compute better curvatures
+
+  // 7. Fill sextic patches
 
-  // 6. Fit sampled points using inner control points
-  auto fixC0Twist = [](size_t i, size_t j) {
-    return i == 0 || j == 0 || i == 6 || j == 6 || ((i == 1 || i == 5) && (j == 1 || j == 5));
-  };
-  for (size_t i = 0; i < quads.size(); ++i)
-    bsplineFit(result[i], quads[i].resolution, quads[i].samples, fixC0Twist, 0.1);
-
-  // 7. Set G1 continuity by direction blends
-
-  // 8. Insert knots & refine boundaries
-
-  // 9. Re-fit inner control points
+
+  // 8. Fit sampled points using inner control points
+  // for (size_t i = 0; i < quads.size(); ++i)
+  //   bsplineFit(result[i], quads[i].resolution, quads[i].samples, fixC0Twist, 0.1);
 
   return result;
 }

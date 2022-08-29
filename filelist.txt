@@ -1,0 +1,44 @@
+Source files
+============
+
+io.{hh,cc}
+----------
+  Procedures for output.
+  - sampled mesh [STL]
+  - control net [OBJ]
+  - sampled boundary curves [OBJ]
+
+bspline-fit.{hh,cc}
+-------------------
+  B-spline surface fitter.
+  - on n x n sample points
+  - fixing any control point of the original
+  - simple smoothing
+
+multiply.{hh,cc}
+----------------
+  Procedure multiplying two B-spline bases, creating a d-by-linear B-spline surface,
+  interpolating a point- and a derivative function.
+  - based on:
+    X. Che, G. Farin, Zh. Gao, D. Hansford: "The product of two B-spline functions".
+    Advanced Materials Research, Vol. 186, pp. 445-448, 2011.
+  - uses numerical integration (Newton-Cotes of [at most] degree 12)
+  - but it is exact (when the resulting degree is <= 6)
+
+connect-g1.{hh,cc} + connect-test.cc
+------------------------------------
+  G1 connection of two opposing cubic-by-linear B-spline ribbons using a direction blend.
+  - the result is a sextic-by-linear surface
+  - symmetric (not master/slave; the cross directions are computed by taking the mean)
+
+fit-ribbon.{hh,cc} + ribbon-test.cc
+-----------------------------------
+  Given a cubic-by-linear B-spline ribbon, and a list of parameters and corresponding h values,
+  modifies the ribbon s.t. its cross-derivative is multiplied by h at these positions.
+  - the result is a sextic-by-linear surface
+  - the scaling function is cubic, fitted on the h values with zero-tangents on both ends
+
+quadfit.{hh,cc} + quadfit-test.cc
+---------------------------------
+  The main library routine. Reads a PWGB file and fits surfaces approximating the samples,
+  while also maintaining G1 continutiy between the patches, and interpolating the outer ribbons.

@@ -5,7 +5,7 @@
 using namespace Geometry;
 
 static const DoubleMatrix newton_cotes =
-  { // n : 1 - 12
+  { // n : 1 - 12; odd n -> exact for degree n; even n -> exact for degree n + 1
     { },
     { 0.5, 0.5 },
     { 0.33333333, 1.33333333, 0.33333333 },
@@ -36,7 +36,7 @@ static double integrate(const std::function<double(double)> &f,
                         const DoubleVector &intervals,
                         size_t degree) {
   double result = 0;
-  size_t n = std::min(12, std::max(1, (int)degree - 1));
+  size_t n = std::min(12, std::max(1, (int)degree));
   for (size_t i = 1; i < intervals.size(); ++i) {
     double sum = 0;
     double h = (intervals[i] - intervals[i-1]) / n;

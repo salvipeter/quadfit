@@ -9,12 +9,17 @@ using namespace Geometry;
 // coordinates of u when decomposed in the (v,w) system
 // (Vector3D instead of Vector2D for convenience)
 static Vector3D inSystem(const Vector3D &u, const Vector3D &v, const Vector3D &w) {
-  auto uv = u ^ v, uw = u ^ w, vw = v ^ w;
-  return {
-    uw.norm() / vw.norm() * (uw * vw > 0 ? 1 : -1),
-    uv.norm() / vw.norm() * (uv * vw < 0 ? 1 : -1),
-    0
-  };
+  // Algebraic version
+  double v2 = v * v, w2 = w * w, uv = u * v, uw = u * w, vw = v * w;
+  double denom = v2 * w2 - vw * vw;
+  return Vector3D(w2 * uv - vw * uw, v2 * uw - vw * uv, 0) / denom;
+  // Geometric version (should be the same)
+  // auto uv = u ^ v, uw = u ^ w, vw = v ^ w;
+  // return {
+  //   uw.norm() / vw.norm() * (uw * vw > 0 ? 1 : -1),
+  //   uv.norm() / vw.norm() * (uv * vw < 0 ? 1 : -1),
+  //   0
+  // };
 }
 
 BSSurface connectG1(const BSCurve &c, const BSCurve &c1, const BSCurve &c2) {

@@ -58,7 +58,7 @@ BSSurface connectG1(const BSCurve &c, const BSCurve &c1, const BSCurve &c2) {
   auto ab_0d = inSystem(S1uv_0 - (S1uv_0 - S2uv_0) / 2 * ab_0[0] - Suu_0 * ab_0[1], D0, Su_0);
   auto ab_1d = inSystem(S1uv_1 - (S1uv_1 - S2uv_1) / 2 * ab_1[0] - Suu_1 * ab_1[1], D1, Su_1);
   BSCurve scaling(3, { lo, lo, lo, lo, hi, hi, hi, hi },
-                  { ab_0, ab_0 + ab_0d / 3, ab_1 - ab_1d / 3, ab_1 });
+                  { ab_0, ab_0 + ab_0d * (hi - lo) / 3, ab_1 - ab_1d * (hi - lo) / 3, ab_1 });
 
   auto point = [&](double u) {
     return c.eval(u);

@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cassert>
 #include <limits>
 
@@ -87,12 +88,13 @@ static double simpson(const std::function<double(double)> &f, double a, double b
   return s;
 }
 
+[[maybe_unused]]
 static double integrate(const std::function<double(double)> &f,
                         const DoubleVector &intervals, size_t degree) {
   double result = 0;
   for (size_t i = 1; i < intervals.size(); ++i)
-    // result += newtonCotes(f, intervals[i-1], intervals[i], degree);
-    result += simpson(f, intervals[i-1], intervals[i], 10, 1e-3);
+    result += newtonCotes(f, intervals[i-1], intervals[i], degree);
+    // result += simpson(f, intervals[i-1], intervals[i], 5, 1e-3);
   return result;
 }
 
@@ -129,12 +131,54 @@ static BSBasis combineBases(const BSBasis &basis1, const BSBasis &basis2) {
   return { d, knots };
 }
 
+[[maybe_unused]]
+static PointVector inBasis(const BSBasis &basis, const std::function<Point3D(double)> &f) {
+  const auto &knots = basis.knots();
+  size_t d = basis.degree();
+  size_t n = knots.size() - d - 1;
+  DoubleVector params;
+  double lo = basis.low(), hi = basis.high();
+  // TODO: uniform sampling may not contain enough samples in each segment
+  for (size_t i = 0; i < n; ++i)
+    params.push_back(lo + (double)i / (n - 1) * (hi - lo));
+  Eigen::MatrixXd A = Eigen::MatrixXd::Zero(n, n), b(n, 3);
+  DoubleVector coeff;
+  for (size_t i = 0; i < n; ++i) {
+    double u = params[i];
+    size_t span = basis.findSpan(u);
+    basis.basisFunctions(span, u, coeff);
+    for (size_t j = 0; j <= d; ++j)
+      A(i, span + j - d) = coeff[j];
+    for (size_t j = 0; j < 3; ++j)
+      b(i, j) = f(u)[j];
+  }
+  Eigen::MatrixXd x = A.fullPivLu().solve(b);
+  PointVector cpts(n);
+  for (size_t i = 0; i < n; ++i)
+    cpts[i] = Vector3D(x(i, 0), x(i, 1), x(i, 2));
+  return cpts;
+}
+
 // The resulting surface is linear in v, with its point- and derivative computed as given.
 BSSurface multiplyBSplines(const BSBasis &basis1, const BSBasis &basis2,
                            const std::function<Point3D(double)> &point,
                            const std::function<Vector3D(double)> &derivative) {
   auto basis = combineBases(basis1, basis2);
   size_t d = basis.degree();
+  const auto &knots = basis.knots();
+
+#ifdef INTERPOLATION_METHOD
+  auto pv1 = inBasis(basis, point);
+  auto pv2 = inBasis(basis, derivative);
+  size_t n_cp = pv1.size();
+  PointVector cp(2 * n_cp);
+  for (size_t i = 0; i < n_cp; ++i) {
+    cp[2*i] = pv1[i];
+    cp[2*i+1] = pv1[i] + pv2[i];
+  }
+  return { d, 1, knots, { 0, 0, 1, 1 }, cp };
+#endif
+
   auto N = [&](size_t i, double u) {
     size_t span = basis.findSpan(u);
     if (i + d < span || i > span)
@@ -145,7 +189,6 @@ BSSurface multiplyBSplines(const BSBasis &basis1, const BSBasis &basis2,
   };
   const auto &h1 = point;
   const auto &h2 = derivative;
-  const auto &knots = basis.knots();
   DoubleVector intervals = { knots.front() };
   for (double k : knots)
     if (k > intervals.back())

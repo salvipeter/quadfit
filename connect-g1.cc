@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <fstream>
 #include <iterator>
 
 #include "connect-g1.hh"
@@ -71,5 +72,23 @@ BSSurface connectG1(const BSCurve &c, const BSCurve &c1, const BSCurve &c2) {
     auto s = scaling.eval(u);
     return (p1 - p2) / 2 * s[0] + der[1] * s[1];
   };
-  return multiplyBSplines(c.basis(), scaling.basis(), point, derivative);
+  // return multiplyBSplines(c.basis(), scaling.basis(), point, derivative);
+
+  auto s = multiplyBSplines(c.basis(), scaling.basis(), point, derivative);
+  auto twist = [&](double u) {
+    VectorVector der;
+    c.eval(u, 2, der);
+    auto Su = der[1], Suu = der[2];
+    auto S1v = c1.eval(u, 1, der);
+    auto S1uv = der[1];
+    auto S2v = c2.eval(u, 1, der);
+    auto S2uv = der[1];
+    auto ab = scaling.eval(u, 1, der);
+    auto abu = der[1];
+    return (S1uv - S2uv) / 2 * ab[0] + (S1v - S2v) / 2 * abu[0] + Suu * ab[1] + Su * abu[1];
+  };
+  VectorMatrix der2;
+  s.eval(lo, lo, 2, der2);
+  std::cout << "twist error: " << (der2[1][1] - twist(lo)).norm() << std::endl;
+  return s;
 }

@@ -1,4 +1,5 @@
 #include <cassert>
+#include <limits>
 
 #include <Eigen/Dense>
 
@@ -44,19 +45,54 @@ static const DoubleMatrix newton_cotes =
     6.797986775129632e0,-1.443863565006422e0,1.88443328100471e0,
     2.596738499595643e-1}};
 
-static double integrate(const std::function<double(double)> &f,
-                        const DoubleVector &intervals,
-                        size_t degree) {
-  assert(degree <= 12);
-  double result = 0;
-  size_t n = std::max(1ul, degree % 2 == 0 ? degree : degree - 1);
-  for (size_t i = 1; i < intervals.size(); ++i) {
-    double sum = 0;
-    double h = (intervals[i] - intervals[i-1]) / n;
-    for (size_t j = 0; j <= n; ++j)
-      sum += f(intervals[i-1] + h * j) * newton_cotes[n][j];
-    result += sum * h;
+[[maybe_unused]]
+static double newtonCotes(const std::function<double(double)> &f, double a, double b,
+                          size_t n) {
+  assert(n <= 12);
+  double sum = 0;
+  double h = (b - a) / n;
+  for (size_t j = 0; j <= n; ++j)
+    sum += f(a + h * j) * newton_cotes[n][j];
+  return sum * h;
+}
+
+static double trapezoid(const std::function<double(double)> &f, double a, double b,
+                        size_t n, double s = 0) {
+  if (n == 1)
+    return (f(a) + f(b)) / 2 * (b - a);
+  size_t k = 1 << (n - 2);
+  double h = (b - a) / k;
+  double x = a + h / 2;
+  double sum = 0;
+  for (size_t i = 0; i < k; ++i)
+    sum += f(x + h * i);
+  return s + h * sum / 2;
+}
+
+[[maybe_unused]]
+static double simpson(const std::function<double(double)> &f, double a, double b,
+                      size_t max_iterations, double tolerance) {
+  double s;
+  double s_prev = -std::numeric_limits<double>::max(), st_prev = s_prev;
+  for (size_t i = 1; i <= max_iterations; ++i) {
+    double st = trapezoid(f, a, b, i, st_prev);
+    s = (st * 4 - st_prev) / 3;
+    if (i > 5 && // avoid exiting too early
+        (std::abs(s - s_prev) < tolerance * std::abs(s_prev) ||
+         (s == 0 && s_prev == 0)))
+      break;
+    s_prev = s;
+    st_prev = st;
   }
+  return s;
+}
+
+static double integrate(const std::function<double(double)> &f,
+                        const DoubleVector &intervals, size_t degree) {
+  double result = 0;
+  for (size_t i = 1; i < intervals.size(); ++i)
+    // result += newtonCotes(f, intervals[i-1], intervals[i], degree);
+    result += simpson(f, intervals[i-1], intervals[i], 10, 1e-3);
   return result;
 }
 

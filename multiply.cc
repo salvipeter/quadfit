@@ -137,10 +137,22 @@ static PointVector inBasis(const BSBasis &basis, const std::function<Point3D(dou
   size_t d = basis.degree();
   size_t n = knots.size() - d - 1;
   DoubleVector params;
-  double lo = basis.low(), hi = basis.high();
-  // TODO: uniform sampling may not contain enough samples in each segment
-  for (size_t i = 0; i < n; ++i)
-    params.push_back(lo + (double)i / (n - 1) * (hi - lo));
+
+  // TODO: this works only in this special case
+  assert(d == 6);
+  for (size_t i = d; i < n; ++i) {
+    double k1 = knots[i];
+    double k2 = knots[i+1];
+    if (k1 == k2)
+      continue;
+    size_t c = (i == d || i == n - 1) ? 5 : 4;
+    for (size_t j = 0; j < c; ++j) {
+      double alpha = (double)j / c;
+      params.push_back(k1 * (1 - alpha) + k2 * alpha);
+    }
+  }
+  params.push_back(knots.back());
+
   Eigen::MatrixXd A = Eigen::MatrixXd::Zero(n, n), b(n, 3);
   DoubleVector coeff;
   for (size_t i = 0; i < n; ++i) {

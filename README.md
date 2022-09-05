@@ -2,7 +2,8 @@
 Fit continuously connected B-spline surfaces on sampled points with boundary constraints.
 
 Uses my [geometry library](https://github.com/salvipeter/libgeom/),
-and my [jet-fitting wrapper](https://github.com/salvipeter/jet-wrapper/) on CGAL.
+my [jet-fitting wrapper](https://github.com/salvipeter/jet-wrapper/) on CGAL,
+and my [Bézier extraction library](https://github.com/salvipeter/bezier-extractions).
 
 Requires:
 - A curve network (given as B-spline curves)

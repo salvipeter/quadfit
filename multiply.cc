@@ -227,19 +227,25 @@ BSSurface multiplyBSplines(const BSBasis &basis1, const BSBasis &basis2,
   return result;
 }
 
+static std::vector<size_t> computeSpans(const BSBasis &basis) {
+  const auto &knots = basis.knots();
+  std::vector<size_t> spans;
+  for (size_t i = 0; i < knots.size() - 1; ++i)
+    if (knots[i] != knots[i+1])
+      spans.push_back(i);
+  return spans;
+}
+
 static std::vector<PointVector> segments(const BSCurve &curve) {
   const auto &basis = curve.basis();
   size_t d = basis.degree();
   const auto &knots = basis.knots();
   const auto &cpts = curve.controlPoints();
-  std::vector<size_t> spans;
-
-  for (size_t i = 0; i < knots.size() - 1; ++i)
-    if (knots[i] != knots[i+1])
-      spans.push_back(i);
+  auto spans = computeSpans(basis);
   size_t L = spans.size();
 
   auto C = bezierExtractionMatrices(d, knots);
+
   std::vector<PointVector> result;
   for (size_t i = 0; i < L; ++i) {
     PointVector pv;
@@ -259,7 +265,7 @@ static PointVector elevateBezier(const PointVector &cpts) {
   size_t n = cpts.size();
   PointVector elevated;
   elevated.push_back(cpts.front());
-  for (size_t i = 1; i < cpts.size(); ++i) {
+  for (size_t i = 1; i < n; ++i) {
     double alpha = (double)i / n;
     elevated.push_back(cpts[i-1] * alpha + cpts[i] * (1 - alpha));
   }
@@ -294,11 +300,7 @@ static PointVector bezierProduct(const PointVector &c, const PointVector &s, siz
 static BSCurve reconstructSpline(const std::vector<PointVector> &segments, const BSBasis &basis) {
   size_t d = basis.degree();
   const auto &knots = basis.knots();
-  std::vector<size_t> spans;
-
-  for (size_t i = 0; i < knots.size() - 1; ++i)
-    if (knots[i] != knots[i+1])
-      spans.push_back(i);
+  auto spans = computeSpans(basis);
 
   auto C = bezierExtractionMatrices(d, knots);
 
@@ -343,11 +345,16 @@ BSSurface multiplyBSplinesByBezier(BSCurve point, BSCurve crossder, BSCurve scal
 
   // Compute the elevated derivative of point
   std::vector<PointVector> elevated_der_segs;
+  auto point_spans = computeSpans(point.basis());
   size_t point_deg = point_segs[0].size() - 1;
-  for (const auto &ps : point_segs) {
+  for (size_t j = 0; j < point_segs.size(); ++j) {
+    const auto &ps = point_segs[j];
     PointVector cpts;
+    double interval =
+      point.basis().knots()[point_spans[j]+1] -
+      point.basis().knots()[point_spans[j]];
     for (size_t i = 1; i < ps.size(); ++i)
-      cpts.push_back((ps[i] - ps[i-1]) * point_deg);
+      cpts.push_back((ps[i] - ps[i-1]) * point_deg / interval);
     elevated_der_segs.push_back(elevateBezier(cpts));
   }
 

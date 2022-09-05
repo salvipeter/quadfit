@@ -61,22 +61,23 @@ BSSurface connectG1(const BSCurve &c, const BSCurve &c1, const BSCurve &c2) {
   BSCurve scaling(3, { lo, lo, lo, lo, hi, hi, hi, hi },
                   { ab_0, ab_0 + ab_0d * (hi - lo) / 3, ab_1 - ab_1d * (hi - lo) / 3, ab_1 });
 
-  auto point = [&](double u) {
-    return c.eval(u);
-  };
-  auto derivative = [&](double u) {
-    VectorVector der;
-    c.eval(u, 1, der);
-    auto p1 = c1.eval(u);
-    auto p2 = c2.eval(u);
-    auto s = scaling.eval(u);
-    return (p1 - p2) / 2 * s[0] + der[1] * s[1];
-  };
-
   // Indirect solution using integration or interpolation
+  // ---
+  // auto point = [&](double u) {
+  //   return c.eval(u);
+  // };
+  // auto derivative = [&](double u) {
+  //   VectorVector der;
+  //   c.eval(u, 1, der);
+  //   auto p1 = c1.eval(u);
+  //   auto p2 = c2.eval(u);
+  //   auto s = scaling.eval(u);
+  //   return (p1 - p2) / 2 * s[0] + der[1] * s[1];
+  // };
   // auto s = multiplyBSplines(c.basis(), scaling.basis(), point, derivative);
 
   // Direct solution on the Bezier segments
+  // ---
   PointVector crossder_cpts;
   size_t n_cpts = c1.controlPoints().size();
   for (size_t i = 0; i < n_cpts; ++i)

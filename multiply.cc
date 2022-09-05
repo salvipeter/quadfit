@@ -4,6 +4,8 @@
 
 #include <Eigen/Dense>
 
+#include <bezier-extractions.hh>
+
 #include "multiply.hh"
 
 using namespace Geometry;
@@ -221,6 +223,156 @@ BSSurface multiplyBSplines(const BSBasis &basis1, const BSBasis &basis2,
   for (size_t i = 0; i <= n; ++i) {
     result.controlPoint(i, 0) = Vector3D(x(i, 0), x(i, 1), x(i, 2));
     result.controlPoint(i, 1) = Vector3D(x(i, 0) + x(i, 3), x(i, 1) + x(i, 4), x(i, 2) + x(i, 5));
+  }
+  return result;
+}
+
+static std::vector<PointVector> segments(const BSCurve &curve) {
+  const auto &basis = curve.basis();
+  size_t d = basis.degree();
+  const auto &knots = basis.knots();
+  const auto &cpts = curve.controlPoints();
+  std::vector<size_t> spans;
+
+  for (size_t i = 0; i < knots.size() - 1; ++i)
+    if (knots[i] != knots[i+1])
+      spans.push_back(i);
+  size_t L = spans.size();
+
+  auto C = bezierExtractionMatrices(d, knots);
+  std::vector<PointVector> result;
+  for (size_t i = 0; i < L; ++i) {
+    PointVector pv;
+    for (size_t j = 0; j <= d; ++j) {
+      Point3D p(0, 0, 0);
+      for (size_t k = 0; k <= d; ++k)
+        p += cpts[spans[i]+k-d] * C[i](k, j);
+      pv.push_back(p);
+    }
+    result.push_back(pv);
+  }
+
+  return result;
+}
+
+static PointVector elevateBezier(const PointVector &cpts) {
+  size_t n = cpts.size();
+  PointVector elevated;
+  elevated.push_back(cpts.front());
+  for (size_t i = 1; i < cpts.size(); ++i) {
+    double alpha = (double)i / n;
+    elevated.push_back(cpts[i-1] * alpha + cpts[i] * (1 - alpha));
+  }
+  elevated.push_back(cpts.back());
+  return elevated;
+}
+
+static size_t binomial(size_t n, size_t k) {
+  if (k > n)
+    return 0;
+  size_t result = 1;
+  for (size_t d = 1; d <= k; ++d, --n)
+    result = result * n / d;
+  return result;
+}
+
+// Computes c(u) * s(u)[i] in Bezier form
+static PointVector bezierProduct(const PointVector &c, const PointVector &s, size_t i) {
+  // As in L. Piegl, W. Tiller: Symbolic operators for NURBS. CAD 29(5), pp. 361-368, 1997.
+  size_t p = c.size() - 1, q = s.size() - 1;
+  PointVector result;
+  for (size_t k = 0; k <= p + q; ++k) {
+    Point3D sum(0, 0, 0);
+    size_t lstart = k > q ? k - q : 0;
+    for (size_t l = lstart; l <= std::min(p, k); ++l)
+      sum += c[l] * s[k-l][i] * binomial(p, l) * binomial(q, k - l) / binomial(p + q, k);
+    result.push_back(sum);
+  }
+  return result;
+}
+
+static BSCurve reconstructSpline(const std::vector<PointVector> &segments, const BSBasis &basis) {
+  size_t d = basis.degree();
+  const auto &knots = basis.knots();
+  std::vector<size_t> spans;
+
+  for (size_t i = 0; i < knots.size() - 1; ++i)
+    if (knots[i] != knots[i+1])
+      spans.push_back(i);
+
+  auto C = bezierExtractionMatrices(d, knots);
+
+  PointVector cpts;
+  for (size_t k = 0; k < knots.size() - d - 1; ++k) {
+    Point3D p(0, 0, 0);
+    size_t i = 0;
+    while (spans[i] < k)
+      ++i;
+    auto Cinv = C[i].inverse();
+    for (size_t j = 0; j <= d; ++j)
+      p += segments[i][j] * Cinv(j, k + d - spans[i]);
+    cpts.push_back(p);
+  }
+
+  return { basis.degree(), basis.knots(), cpts };
+}
+
+BSSurface multiplyBSplinesByBezier(BSCurve point, BSCurve crossder, BSCurve scaling) {
+  auto basis = combineBases(point.basis(), scaling.basis());
+  size_t d = basis.degree();
+
+  // Insert missing knots for correct segmentation
+  for (double k : basis.knots()) {
+    if (std::find(point.basis().knots().begin(),
+                  point.basis().knots().end(),
+                  k) ==
+        point.basis().knots().end()) {
+      point = point.insertKnot(k, 1);
+      crossder = crossder.insertKnot(k, 1);
+    }
+    if (std::find(scaling.basis().knots().begin(),
+                  scaling.basis().knots().end(),
+                  k) ==
+        scaling.basis().knots().end())
+      scaling = scaling.insertKnot(k, 1);
+  }
+
+  auto point_segs = segments(point);
+  auto crossder_segs = segments(crossder);
+  auto scaling_segs = segments(scaling);
+
+  // Compute the elevated derivative of point
+  std::vector<PointVector> elevated_der_segs;
+  size_t point_deg = point_segs[0].size() - 1;
+  for (const auto &ps : point_segs) {
+    PointVector cpts;
+    for (size_t i = 1; i < ps.size(); ++i)
+      cpts.push_back((ps[i] - ps[i-1]) * point_deg);
+    elevated_der_segs.push_back(elevateBezier(cpts));
+  }
+
+  // Compute the product for each Bezier segment
+  size_t L = point_segs.size();
+  for (size_t i = 0; i < L; ++i) {
+    for (size_t j = 0; j < d - point_deg; ++j)
+      point_segs[i] = elevateBezier(point_segs[i]);
+    crossder_segs[i] = bezierProduct(crossder_segs[i], scaling_segs[i], 0);
+    elevated_der_segs[i] = bezierProduct(elevated_der_segs[i], scaling_segs[i], 1);
+    for (size_t j = 0; j <= d; ++j)
+      crossder_segs[i][j] += point_segs[i][j] + elevated_der_segs[i][j];
+  }
+
+  // Reconstruct the B-Spline curves
+  auto c0 = reconstructSpline(point_segs, basis);
+  auto c1 = reconstructSpline(crossder_segs, basis);
+
+  // Build the final surface
+  size_t n = c0.controlPoints().size();
+  PointVector cpts(2 * n);
+  BSSurface result(d, 1, basis.knots(), { 0, 0, 1, 1 }, cpts);
+  for (size_t i = 0; i < n; ++i) {
+    result.controlPoint(i, 0) = c0.controlPoints()[i];
+    result.controlPoint(i, 1) = c1.controlPoints()[i];
   }
   return result;
 }

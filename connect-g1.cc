@@ -72,5 +72,17 @@ BSSurface connectG1(const BSCurve &c, const BSCurve &c1, const BSCurve &c2) {
     auto s = scaling.eval(u);
     return (p1 - p2) / 2 * s[0] + der[1] * s[1];
   };
-  return multiplyBSplines(c.basis(), scaling.basis(), point, derivative);
+
+  // Indirect solution using integration or interpolation
+  // auto s = multiplyBSplines(c.basis(), scaling.basis(), point, derivative);
+
+  // Direct solution on the Bezier segments
+  PointVector crossder_cpts;
+  size_t n_cpts = c1.controlPoints().size();
+  for (size_t i = 0; i < n_cpts; ++i)
+    crossder_cpts.push_back((c1.controlPoints()[i] - c2.controlPoints()[i]) / 2);
+  BSCurve crossder(c1.basis().degree(), c1.basis().knots(), crossder_cpts);
+  auto s = multiplyBSplinesByBezier(c, crossder, scaling);
+
+  return s;
 }

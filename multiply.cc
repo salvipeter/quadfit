@@ -319,6 +319,22 @@ static BSCurve reconstructSpline(const std::vector<PointVector> &segments, const
   return { basis.degree(), basis.knots(), cpts };
 }
 
+static BSCurve deriveBSpline(const BSCurve &curve) {
+  const auto &basis = curve.basis();
+  size_t d = basis.degree();
+  const auto &knots = basis.knots();
+  const auto &cpts = curve.controlPoints();
+
+  size_t d1 = d - 1;
+  DoubleVector knots1;
+  std::copy_n(knots.begin() + 1, knots.size() - 2, std::back_inserter(knots1));
+  PointVector cpts1;
+  for (size_t i = 1; i < cpts.size(); ++i)
+    cpts1.push_back((cpts[i] - cpts[i-1]) * d / (knots[i+d] - knots[i]));
+
+  return { d1, knots1, cpts1 };
+}
+
 BSSurface multiplyBSplinesByBezier(BSCurve point, BSCurve crossder, BSCurve scaling) {
   auto basis = combineBases(point.basis(), scaling.basis());
   size_t d = basis.degree();
@@ -339,34 +355,23 @@ BSSurface multiplyBSplinesByBezier(BSCurve point, BSCurve crossder, BSCurve scal
       scaling = scaling.insertKnot(k, 1);
   }
 
+  // Compute Bezier segments
   auto point_segs = segments(point);
+  auto der_segs = segments(deriveBSpline(point));
   auto crossder_segs = segments(crossder);
   auto scaling_segs = segments(scaling);
 
-  // Compute the elevated derivative of point
-  std::vector<PointVector> elevated_der_segs;
-  auto point_spans = computeSpans(point.basis());
-  size_t point_deg = point_segs[0].size() - 1;
-  for (size_t j = 0; j < point_segs.size(); ++j) {
-    const auto &ps = point_segs[j];
-    PointVector cpts;
-    double interval =
-      point.basis().knots()[point_spans[j]+1] -
-      point.basis().knots()[point_spans[j]];
-    for (size_t i = 1; i < ps.size(); ++i)
-      cpts.push_back((ps[i] - ps[i-1]) * point_deg / interval);
-    elevated_der_segs.push_back(elevateBezier(cpts));
-  }
-
   // Compute the product for each Bezier segment
   size_t L = point_segs.size();
+  size_t point_deg = point_segs[0].size() - 1;
   for (size_t i = 0; i < L; ++i) {
     for (size_t j = 0; j < d - point_deg; ++j)
       point_segs[i] = elevateBezier(point_segs[i]);
+    der_segs[i] = elevateBezier(der_segs[i]);
+    der_segs[i] = bezierProduct(der_segs[i], scaling_segs[i], 1);
     crossder_segs[i] = bezierProduct(crossder_segs[i], scaling_segs[i], 0);
-    elevated_der_segs[i] = bezierProduct(elevated_der_segs[i], scaling_segs[i], 1);
     for (size_t j = 0; j <= d; ++j)
-      crossder_segs[i][j] += point_segs[i][j] + elevated_der_segs[i][j];
+      crossder_segs[i][j] += point_segs[i][j] + der_segs[i][j];
   }
 
   // Reconstruct the B-Spline curves

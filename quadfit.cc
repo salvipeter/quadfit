@@ -165,6 +165,45 @@ std::vector<BSSurface> QuadFit::initialFit() const {
   return result;
 }
 
+std::vector<std::pair<size_t,size_t>> QuadFit::ribbonSegments(size_t index) const {
+  std::vector<std::pair<size_t,size_t>> result;
+  const auto &r = ribbons[index][0];
+  auto p = r.controlPoints().front(), last = r.controlPoints().back();
+  auto samePoint = [](const Point3D &a, const Point3D &b) {
+    return (a - b).normSqr() == 0; // assumes numerical equivalence!
+  };
+  while (!samePoint(p, last)) {
+    bool found = false;
+    for (size_t i = 0; i < quads.size(); ++i) {
+      const auto &q = quads[i];
+      for (size_t j = 0; j < 4; ++j) {
+        const auto &b = q.boundaries[j];
+        if (b.on_ribbon && b.ribbon == index) {
+          const auto &cp = segments[b.segment].controlPoints();
+          if (samePoint(cp.front(), p) &&
+              (result.empty() || result.back().first != i)) {
+            result.push_back({ i, j });
+            p = cp.back();
+            found = true;
+            break;
+          } else if (samePoint(cp.back(), p) &&
+                     (result.empty() || result.back().first != i)) {
+            result.push_back({ i, j });
+            p = cp.front();
+            found = true;
+            break;
+          }
+        }
+      }
+      if (found)
+        break;
+    }
+    assert(found);
+  }
+  return result;
+}
+
+
 static BSSurface elevateBezierU(const BSSurface &surface) {
   size_t du = surface.basisU().degree();
   size_t dv = surface.basisV().degree();
@@ -264,6 +303,22 @@ std::vector<BSSurface> QuadFit::fit() {
 
 
   // 2. Fit ribbons
+  for (size_t i = 0; i < ribbons.size(); ++i) {
+    auto rs = ribbonSegments(i);
+    Point2DVector sh;
+    std::cout << "Ribbon #" << i + 1 << ":";
+    for (auto s : rs) {
+      const auto &b = quads[s.first].boundaries[s.second];
+      sh.emplace_back(b.s0, b.h0);
+      sh.emplace_back(b.s1, b.h1);
+      std::cout << ' ' << b.segment + 1;
+    }
+    std::cout << std::endl;
+    std::cout << "s values:";
+    for (const auto &s : sh)
+      std::cout << ' ' << s[0];
+    std::cout << std::endl;
+  }
 
 
   // 3. Compute better first derivatives for the quad boundary curves

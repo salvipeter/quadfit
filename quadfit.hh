@@ -26,6 +26,7 @@ private:
   };
 
   std::vector<Geometry::BSSurface> initialFit() const;
+  std::vector<std::pair<size_t, size_t>> ribbonSegments(size_t i) const;
 
   std::vector<Ribbon> ribbons;
   std::vector<Geometry::BSCurve> segments;

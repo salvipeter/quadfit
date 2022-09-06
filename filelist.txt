@@ -24,11 +24,9 @@ multiply.{hh,cc}
     Advanced Materials Research, Vol. 186, pp. 445-448, 2011.
   - uses numerical integration (Newton-Cotes of [at most] degree 12 or Simpson [slow])
   - but it is exact (when the resulting degree is <= 6)
-  - still, the numerical error is quite large (10^-3)
-  - alternative 1: interpolation (not better)
+  - alternative 1: interpolation
   - alternative 2: direct solution on the Bezier segments, using extraction matrices:
     L. Piegl, W. Tiller: Symbolic operators for NURBS. CAD 29(5), pp. 361-368, 1997.
-    (much better)
 
 connect-g1.{hh,cc} + connect-test.cc
 ------------------------------------

@@ -74,7 +74,7 @@ BSSurface connectG1(const BSCurve &c, const BSCurve &c1, const BSCurve &c2) {
     auto s = scaling.eval(u);
     return (p1 - p2) / 2 * s[0] + der[1] * s[1];
   };
-  auto s = multiplyBSplines(c.basis(), scaling.basis(), point, derivative);
+  auto s = multiplyBSplines(c1.basis(), scaling.basis(), point, derivative);
 
   // Direct solution on the Bezier segments
   // ---

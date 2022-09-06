@@ -5,7 +5,7 @@
 using namespace Geometry;
 
 BSSurface createSurface(const BSCurve &p, const BSCurve &d) {
-  return multiplyBSplines(p.basis(), p.basis(),
+  return multiplyBSplines(d.basis(), d.basis(),
                           [&](double u) { return p.eval(u); },
                           [&](double u) { return d.eval(u) - p.eval(u); });
 }

@@ -336,7 +336,7 @@ static BSCurve deriveBSpline(const BSCurve &curve) {
 }
 
 BSSurface multiplyBSplinesByBezier(BSCurve point, BSCurve crossder, BSCurve scaling) {
-  auto basis = combineBases(point.basis(), scaling.basis());
+  auto basis = combineBases(crossder.basis(), scaling.basis());
   size_t d = basis.degree();
 
   // Insert missing knots for correct segmentation
@@ -367,7 +367,8 @@ BSSurface multiplyBSplinesByBezier(BSCurve point, BSCurve crossder, BSCurve scal
   for (size_t i = 0; i < L; ++i) {
     for (size_t j = 0; j < d - point_deg; ++j)
       point_segs[i] = elevateBezier(point_segs[i]);
-    der_segs[i] = elevateBezier(der_segs[i]);
+    if (der_segs[i].size() < crossder_segs[i].size())
+      der_segs[i] = elevateBezier(der_segs[i]);
     der_segs[i] = bezierProduct(der_segs[i], scaling_segs[i], 1);
     crossder_segs[i] = bezierProduct(crossder_segs[i], scaling_segs[i], 0);
     for (size_t j = 0; j <= d; ++j)

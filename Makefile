@@ -3,7 +3,7 @@ all: quadfit-test ribbon-test connect-test
 EIGEN=/usr/include/eigen3
 LIBGEOM=../libgeom
 JETWRAP=../jet-wrapper
-EXTRACT=../bezier-extraction
+EXTRACT=../bezier-extractions
 
 CXXFLAGS=-Wall -pedantic -std=c++17 -O0 -g -I$(LIBGEOM) -I$(JETWRAP) -I$(EXTRACT) -I$(EIGEN)
 LDFLAGS=-L$(LIBGEOM)/debug -lgeom -lomp

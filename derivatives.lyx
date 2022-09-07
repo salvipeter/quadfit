@@ -1,0 +1,264 @@
+#LyX 2.3 created this file. For more info see http://www.lyx.org/
+\lyxformat 544
+\begin_document
+\begin_header
+\save_transient_properties true
+\origin unavailable
+\textclass article
+\use_default_options true
+\maintain_unincluded_children false
+\language english
+\language_package default
+\inputencoding auto
+\fontencoding global
+\font_roman "default" "default"
+\font_sans "default" "default"
+\font_typewriter "default" "default"
+\font_math "auto" "auto"
+\font_default_family default
+\use_non_tex_fonts false
+\font_sc false
+\font_osf false
+\font_sf_scale 100 100
+\font_tt_scale 100 100
+\use_microtype false
+\use_dash_ligatures true
+\graphics default
+\default_output_format default
+\output_sync 0
+\bibtex_command default
+\index_command default
+\paperfontsize default
+\use_hyperref false
+\papersize default
+\use_geometry false
+\use_package amsmath 1
+\use_package amssymb 1
+\use_package cancel 1
+\use_package esint 1
+\use_package mathdots 1
+\use_package mathtools 1
+\use_package mhchem 1
+\use_package stackrel 1
+\use_package stmaryrd 1
+\use_package undertilde 1
+\cite_engine basic
+\cite_engine_type default
+\use_bibtopic false
+\use_indices false
+\paperorientation portrait
+\suppress_date false
+\justification true
+\use_refstyle 1
+\use_minted 0
+\index Index
+\shortcut idx
+\color #008000
+\end_index
+\secnumdepth 3
+\tocdepth 3
+\paragraph_separation indent
+\paragraph_indentation default
+\is_math_indent 0
+\math_numbering_side default
+\quotes_style english
+\dynamic_quotes 0
+\papercolumns 1
+\papersides 1
+\paperpagestyle default
+\tracking_changes false
+\output_changes false
+\html_math_output 0
+\html_css_as_file 0
+\html_be_strict false
+\end_header
+
+\begin_body
+
+\begin_layout Title
+Computing derivatives
+\begin_inset Newline newline
+\end_inset
+
+based on surface curvatures
+\end_layout
+
+\begin_layout Standard
+At a corner the following quantities are known:
+\end_layout
+
+\begin_layout Itemize
+First derivative (
+\begin_inset Formula $S_{u}$
+\end_inset
+
+)
+\end_layout
+
+\begin_layout Itemize
+First cross-derivative (
+\begin_inset Formula $S_{v}$
+\end_inset
+
+)
+\end_layout
+
+\begin_layout Itemize
+Normal vector (
+\begin_inset Formula $n=(S_{u}\times S_{v})/\|S_{u}\times S_{v}\|$
+\end_inset
+
+)
+\end_layout
+
+\begin_layout Itemize
+Principal directions (
+\begin_inset Formula $e_{\max}$
+\end_inset
+
+, 
+\begin_inset Formula $e_{\min}$
+\end_inset
+
+)
+\end_layout
+
+\begin_layout Itemize
+Principal curvatures (
+\begin_inset Formula $\kappa_{\max}$
+\end_inset
+
+, 
+\begin_inset Formula $\kappa_{\min}$
+\end_inset
+
+)
+\end_layout
+
+\begin_layout Standard
+Based on the above information, we need to compute 
+\begin_inset Formula $S_{uu}$
+\end_inset
+
+, 
+\begin_inset Formula $S_{vv}$
+\end_inset
+
+ and 
+\begin_inset Formula $S_{uv}$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Standard
+Let 
+\begin_inset Formula $\vartheta_{u}$
+\end_inset
+
+ (
+\begin_inset Formula $\vartheta_{v}$
+\end_inset
+
+) be the oriented angles between 
+\begin_inset Formula $S_{u}$
+\end_inset
+
+ (
+\begin_inset Formula $S_{v}$
+\end_inset
+
+) and 
+\begin_inset Formula $e_{\max}$
+\end_inset
+
+.
+ Then, according to Euler's theorem
+\begin_inset Formula 
+\begin{align}
+\kappa_{u} & =\kappa_{\max}\cos^{2}\vartheta_{u}+\kappa_{\min}\sin^{2}\vartheta_{u},\nonumber \\
+\kappa_{v} & =\kappa_{\max}\cos^{2}\vartheta_{v}+\kappa_{\min}\sin^{2}\vartheta_{v},
+\end{align}
+
+\end_inset
+
+where 
+\begin_inset Formula $\kappa_{u}$
+\end_inset
+
+ and 
+\begin_inset Formula $\kappa_{v}$
+\end_inset
+
+ are the normal curvatures of the corresponding curves.
+ We also know that
+\begin_inset Formula 
+\begin{align}
+h_{uu} & =2\kappa_{u}\|S_{u}\|^{2}, & h_{vv} & =2\kappa_{v}\|S_{v}\|^{2},
+\end{align}
+
+\end_inset
+
+with 
+\begin_inset Formula $h_{uu}$
+\end_inset
+
+ and 
+\begin_inset Formula $h_{vv}$
+\end_inset
+
+ denoting the distance of 
+\begin_inset Formula $S_{uu}$
+\end_inset
+
+ and 
+\begin_inset Formula $S_{vv}$
+\end_inset
+
+ from the tangent plane at the corner.
+ (Can we move it anywhere in that plane?)
+\end_layout
+
+\begin_layout Standard
+Finally, from
+\begin_inset Formula 
+\begin{equation}
+\|S_{uv}-n\|^{2}=(S_{uu}n)(S_{vv}n)-\kappa_{\max}\kappa_{\min}\|S_{u}\times S_{v}\|^{2},
+\end{equation}
+
+\end_inset
+
+we arrive at ??? (This seems to constrain 
+\begin_inset Formula $S_{uv}$
+\end_inset
+
+ on a sphere...)
+\end_layout
+
+\begin_layout Subsection*
+Computing oriented angles
+\end_layout
+
+\begin_layout Standard
+First express both vectors in their common plane, so 
+\begin_inset Formula $v_{1}=(x_{1},y_{1})$
+\end_inset
+
+ and 
+\begin_inset Formula $v_{2}=(x_{2},y_{2})$
+\end_inset
+
+.
+ Then the angle can be computed by
+\begin_inset Formula 
+\[
+\vartheta=\mathrm{atan2}(x_{1}y_{2}-y_{1}x_{2},x_{1}x_{2}+y_{1}y_{2}).
+\]
+
+\end_inset
+
+
+\end_layout
+
+\end_body
+\end_document

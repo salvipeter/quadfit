@@ -223,16 +223,13 @@ with
 Finally, from
 \begin_inset Formula 
 \begin{equation}
-\|S_{uv}-n\|^{2}=(S_{uu}n)(S_{vv}n)-\kappa_{\max}\kappa_{\min}\|S_{u}\times S_{v}\|^{2},
+S_{uv}n=\sqrt{(S_{uu}n)(S_{vv}n)-\kappa_{\max}\kappa_{\min}\|S_{u}\times S_{v}\|^{2}},
 \end{equation}
 
 \end_inset
 
-we arrive at ??? (This seems to constrain 
-\begin_inset Formula $S_{uv}$
-\end_inset
-
- on a sphere...)
+we can determine the ``height'' of the twist vector; its position in that
+ plane can be assigned using the parallelogram rule or some other heuristics.
 \end_layout
 
 \begin_layout Subsection*

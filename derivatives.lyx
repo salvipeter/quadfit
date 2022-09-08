@@ -194,33 +194,13 @@ where
  We also know that
 \begin_inset Formula 
 \begin{align}
-h_{uu} & =2\kappa_{u}\|S_{u}\|^{2}, & h_{vv} & =2\kappa_{v}\|S_{v}\|^{2},
+S_{uu}n & =\kappa_{u}\|S_{u}\|^{2}, & S_{vv}n & =\kappa_{v}\|S_{v}\|^{2},
 \end{align}
 
 \end_inset
 
-with 
-\begin_inset Formula $h_{uu}$
-\end_inset
-
- and 
-\begin_inset Formula $h_{vv}$
-\end_inset
-
- denoting the distance of 
-\begin_inset Formula $S_{uu}$
-\end_inset
-
- and 
-\begin_inset Formula $S_{vv}$
-\end_inset
-
- from the tangent plane at the corner.
- (Can we move it anywhere in that plane?)
-\end_layout
-
-\begin_layout Standard
-Finally, from
+which constrains the ``height'' of the second derivatives.
+ Similarly, from
 \begin_inset Formula 
 \begin{equation}
 S_{uv}n=\sqrt{(S_{uu}n)(S_{vv}n)-\kappa_{\max}\kappa_{\min}\|S_{u}\times S_{v}\|^{2}},
@@ -228,8 +208,8 @@ S_{uv}n=\sqrt{(S_{uu}n)(S_{vv}n)-\kappa_{\max}\kappa_{\min}\|S_{u}\times S_{v}\|
 
 \end_inset
 
-we can determine the ``height'' of the twist vector; its position in that
- plane can be assigned using the parallelogram rule or some other heuristics.
+we can determine the height of the twist vector; its position in that plane
+ can be assigned using the parallelogram rule or some other heuristics.
 \end_layout
 
 \begin_layout Subsection*

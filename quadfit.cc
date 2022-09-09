@@ -270,11 +270,6 @@ static BSSurface ribbonToSurface(const std::array<BSCurve, 2> &ribbon) {
   return { basis.degree(), 1, basis.knots(), { 0, 0, 1, 1 }, cpts };
 }
 
-double orientedAngle(const Vector3D &u, const Vector3D &v, const Vector3D &n) {
-  double angle = std::acos(std::min(1.0, std::max(-1.0, u.normalized() * v.normalized())));
-  return angle * ((u ^ v) * n < 0 ? -1 : 1);
-}
-
 std::vector<BSSurface> QuadFit::fit() {
   // Topology & geometry structures
   std::vector<Point3D> vertices;
@@ -435,8 +430,9 @@ std::vector<BSSurface> QuadFit::fit() {
         const auto &n = jet[v].normal;
         auto der = (cpts[tangent_cps5[j]] - cpts[vertex_cps5[j]]) * 5 * (at_end ? -1 : 1);
         size_t index = vertex_cps5[j] + ((int)tangent_cps5[j] - (int)vertex_cps5[j]) * 2;
-        double theta = orientedAngle(jet[v].d_max, der, n);
-        double k = jet[v].k_max * std::pow(cos(theta), 2) + jet[v].k_min * std::pow(sin(theta), 2);
+        double cos_theta = jet[v].d_max * der.normalized();
+        double c2 = cos_theta * cos_theta, s2 = 1 - c2;
+        double k = jet[v].k_max * c2 + jet[v].k_min * s2;
         double h = k * der.normSqr();
         cpts[index] += n * (n * (cpts[vertex_cps5[j]] - cpts[index]) + h / 20);
       };
@@ -484,8 +480,13 @@ std::vector<BSSurface> QuadFit::fit() {
 
 
   // 8. Fit sampled points using inner control points
-  // for (size_t i = 0; i < quads.size(); ++i)
-  //   bsplineFit(result[i], quads[i].resolution, quads[i].samples, fixC0Twist, 0.1);
+  // for (size_t i = 0; i < quads.size(); ++i) {
+  //   auto ncp = result[i].numControlPoints();
+  //   auto fix2 = [&](size_t i, size_t j) {
+  //     return i < 2 || j < 2 || i >= ncp[0] - 2 || j >= ncp[1] - 2;
+  //   };
+  //   bsplineFit(result[i], quads[i].resolution, quads[i].samples, fix2, 0.1);
+  // }
 
   return result;
 }

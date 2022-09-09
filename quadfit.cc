@@ -264,7 +264,7 @@ static BSSurface ribbonToSurface(const std::array<BSCurve, 2> &ribbon) {
   const auto &cp0 = ribbon[0].controlPoints(), &cp1 = ribbon[1].controlPoints();
   for (size_t i = 0; i < cp0.size(); ++i) {
     cpts.push_back(cp0[i]);
-    cpts.push_back(cp1[i]);
+    cpts.push_back(cp0[i] + (cp1[i] - cp0[i]) * 3);
   }
   return { basis.degree(), 1, basis.knots(), { 0, 0, 1, 1 }, cpts };
 }
@@ -303,7 +303,7 @@ std::vector<BSSurface> QuadFit::fit() {
   for (const auto &q : quads)
     all_points.insert(all_points.end(), q.samples.begin(), q.samples.end());
   auto jet = JetWrapper::fit(vertices, JetWrapper::Nearest(all_points));
-  // TODO: these should be fixed at non-corner ribbon vertices
+  // Note: only those at inner vertices should be used
 
   writeVertexCurvatures(vertices, jet, "/tmp/curvatures.vtk"); // (just for debugging)
 
@@ -319,7 +319,7 @@ std::vector<BSSurface> QuadFit::fit() {
   for (size_t i = 0; i < ribbons.size(); ++i) {
     auto rs = ribbonSegments(i);
     Point2DVector sh;
-    std::cout << "Ribbon #" << i + 1 << ":";
+    // std::cout << "Ribbon #" << i + 1 << ":";
     for (auto s : rs) {
       const auto &b = quads[s.first].boundaries[s.second];
       if (b.s0 < b.s1) {
@@ -331,13 +331,13 @@ std::vector<BSSurface> QuadFit::fit() {
           sh.emplace_back(b.s1, b.h1);
         sh.emplace_back(b.s0, b.h0);
       }
-      std::cout << ' ' << b.segment + 1;
+      // std::cout << ' ' << b.segment + 1;
     }
-    std::cout << std::endl;
-    std::cout << "s values:";
-    for (const auto &s : sh)
-      std::cout << ' ' << s[0];
-    std::cout << std::endl;
+    // std::cout << std::endl;
+    // std::cout << "s values:";
+    // for (const auto &s : sh)
+    //   std::cout << ' ' << s[0];
+    // std::cout << std::endl;
     auto slices = fitSlices(ribbonToSurface(ribbons[i]), sh);
     for (size_t j = 0; j < slices.size(); ++j) {
       auto s = rs[j];
@@ -361,51 +361,37 @@ std::vector<BSSurface> QuadFit::fit() {
       const auto &b = quads[i].boundaries[side];
       const auto &bp = quads[i].boundaries[(side+3)%4];
       const auto &bn = quads[i].boundaries[(side+1)%4];
-      const auto &curve = ribbons[b.ribbon][0];
-      auto matchRibbon = [&](size_t v, size_t t, double interval, const Vector3D &d) {
-        cpts[t] = cpts[v] + d / 3 * interval;
-      };
-      VectorVector der;
       if (b.on_ribbon) {
-        curve.eval(b.s0, 1, der);
-        matchRibbon(vertex_cps[2*side], tangent_cps[2*side], b.s1 - b.s0, der[1]);
-        curve.eval(b.s1, 1, der);
-        matchRibbon(vertex_cps[2*side+1], tangent_cps[2*side+1], b.s1 - b.s0, -der[1]);
+        VectorMatrix der;
+        const auto &basis = b.sextic.basisU();
+        double interval = basis.high() - basis.low();
+        b.sextic.eval(basis.low(), 0, 1, der);
+        cpts[tangent_cps[2*side]] = cpts[vertex_cps[2*side]] + der[1][0] / 3 * interval;
+        b.sextic.eval(basis.high(), 0, 1, der);
+        cpts[tangent_cps[2*side+1]] = cpts[vertex_cps[2*side+1]] - der[1][0] / 3 * interval;
       } else {
         auto projectToPlane = [&](size_t v, size_t t, const Vector3D &n) {
           cpts[t] += n * (n * (cpts[v] - cpts[t]));
         };
         const auto &n1 = jet[endpoints[b.segment].first].normal;
         const auto &n2 = jet[endpoints[b.segment].second].normal;
+        // Replace start/end tangent based on the ribbons where applicable
+        VectorMatrix der;
+        if (bp.on_ribbon)
+          bp.sextic.eval(bp.sextic.basisU().high(), 0, 1, der);
+        else if (bn.on_ribbon)
+          bn.sextic.eval(bn.sextic.basisU().low(), 0, 1, der);
         bool replace_start = ((bp.on_ribbon && (side == 1 || side == 2)) ||
                               (bn.on_ribbon && (side == 0 || side == 3)));
         bool replace_end   = ((bp.on_ribbon && (side == 0 || side == 3)) ||
                               (bn.on_ribbon && (side == 1 || side == 2)));
-        if (replace_start) {
-          auto v = cpts[vertex_cps[2*side]], t = cpts[tangent_cps[2*side]];
-          Point3D p;
-          if (side < 2) {
-            const auto &B = side == 0 ? bn : bp;
-            p = ribbons[B.ribbon][1].eval(B.s0);
-          } else {
-            const auto &B = side == 3 ? bn : bp;
-            p = ribbons[B.ribbon][1].eval(B.s1);
-          }
-          cpts[tangent_cps[2*side]] = v + (p - v).normalized() * (t - v).norm(); // or: p
-        } else
+        if (replace_start)
+          cpts[tangent_cps[2*side]] = cpts[vertex_cps[2*side]] + der[0][1] / 3;
+        else
           projectToPlane(vertex_cps[2*side], tangent_cps[2*side], b.reversed ? n2 : n1);
-        if (replace_end) {
-          auto v = cpts[vertex_cps[2*side+1]], t = cpts[tangent_cps[2*side+1]];
-          Point3D p;
-          if (side < 2) {
-            const auto &B = side == 1 ? bn : bp;
-            p = ribbons[B.ribbon][1].eval(B.s0);
-          } else {
-            const auto &B = side == 2 ? bn : bp;
-            p = ribbons[B.ribbon][1].eval(B.s1);
-          }
-          cpts[tangent_cps[2*side+1]] = v + (p - v).normalized() * (t - v).norm(); // or: p
-        } else
+        if (replace_end)
+          cpts[tangent_cps[2*side+1]] = cpts[vertex_cps[2*side+1]] + der[0][1] / 3;
+        else
           projectToPlane(vertex_cps[2*side+1], tangent_cps[2*side+1], b.reversed ? n1 : n2);
       }
     }

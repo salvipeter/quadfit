@@ -6,6 +6,7 @@ PWGB File Format
 
 # First part - ribbons
 #   Ribbons are described by two cubic B-spline curves
+#   This is assumed to be a cubic half-ribbon.
 <number of sides>
 <Side 1 outer curve>   # (see Appendix)
 <Side 1 inner curve>

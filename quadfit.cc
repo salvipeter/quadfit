@@ -377,10 +377,17 @@ std::vector<BSSurface> QuadFit::fit() {
         const auto &n2 = jet[endpoints[b.segment].second].normal;
         // Replace start/end tangent based on the ribbons where applicable
         VectorMatrix der;
-        if (bp.on_ribbon)
-          bp.sextic.eval(bp.sextic.basisU().high(), 0, 1, der);
-        else if (bn.on_ribbon)
-          bn.sextic.eval(bn.sextic.basisU().low(), 0, 1, der);
+        if (bp.on_ribbon) {
+          if (side == 2 || side == 3)
+            bp.sextic.eval(bp.sextic.basisU().high(), 0, 1, der);
+          else
+            bp.sextic.eval(bp.sextic.basisU().low(), 0, 1, der);
+        } else if (bn.on_ribbon) {
+          if (side == 2 || side == 3)
+            bn.sextic.eval(bn.sextic.basisU().high(), 0, 1, der);
+          else
+            bn.sextic.eval(bn.sextic.basisU().low(), 0, 1, der);
+        }
         bool replace_start = ((bp.on_ribbon && (side == 1 || side == 2)) ||
                               (bn.on_ribbon && (side == 0 || side == 3)));
         bool replace_end   = ((bp.on_ribbon && (side == 0 || side == 3)) ||
@@ -401,36 +408,36 @@ std::vector<BSSurface> QuadFit::fit() {
   // 4. Compute better second derivatives for the quad boundary curves
 
   // First degree elevate to quartic, and guarantee at least 2 segments (6 CPs)
-  // for (auto &s : result)
-  //   s = elevateBezier(s, 4);
+  for (auto &s : result)
+    s = elevateBezier(s, 4);
 
 
   // 5. Compute twist vectors
-  constexpr std::array<size_t, 16> corner_cps =
-    { 0, 1, 4, 5, 12, 8, 13, 9, 15, 14, 11, 10, 3, 7, 2, 6 };
-  for (size_t i = 0; i < quads.size(); ++i) {
-    auto &cpts = result[i].controlPoints();
-    for (size_t side = 0; side < 4; ++side) {
-      size_t p = corner_cps[4*side], t1 = corner_cps[4*side+1];
-      size_t t2 = corner_cps[4*side+2], tw = corner_cps[4*side+3];
-      const auto &b = quads[i].boundaries[side];
-      const auto &bn = quads[i].boundaries[(side+1)%4];
-      if (b.on_ribbon && bn.on_ribbon) {
-        VectorVector der0, der1;
-        if (side == 0 || side == 3) {
-          ribbons[b.ribbon][0].eval(b.s0, 1, der0);
-          ribbons[b.ribbon][1].eval(b.s0, 1, der1);
-        } else {
-          ribbons[b.ribbon][0].eval(b.s1, 1, der0);
-          ribbons[b.ribbon][1].eval(b.s1, 1, der1);
-        }
-        auto twist = (der1[1] - der0[1]) * (b.s1 - b.s0);
-        cpts[tw] = twist / 9 - cpts[p] + cpts[t1] + cpts[t2];
-      } else {
-        // TODO
-      }
-    }
-  }
+  // constexpr std::array<size_t, 16> corner_cps =
+  //   { 0, 1, 4, 5, 12, 8, 13, 9, 15, 14, 11, 10, 3, 7, 2, 6 };
+  // for (size_t i = 0; i < quads.size(); ++i) {
+  //   auto &cpts = result[i].controlPoints();
+  //   for (size_t side = 0; side < 4; ++side) {
+  //     size_t p = corner_cps[4*side], t1 = corner_cps[4*side+1];
+  //     size_t t2 = corner_cps[4*side+2], tw = corner_cps[4*side+3];
+  //     const auto &b = quads[i].boundaries[side];
+  //     const auto &bn = quads[i].boundaries[(side+1)%4];
+  //     if (b.on_ribbon && bn.on_ribbon) {
+  //       VectorVector der0, der1;
+  //       if (side == 0 || side == 3) {
+  //         ribbons[b.ribbon][0].eval(b.s0, 1, der0);
+  //         ribbons[b.ribbon][1].eval(b.s0, 1, der1);
+  //       } else {
+  //         ribbons[b.ribbon][0].eval(b.s1, 1, der0);
+  //         ribbons[b.ribbon][1].eval(b.s1, 1, der1);
+  //       }
+  //       auto twist = (der1[1] - der0[1]) * (b.s1 - b.s0);
+  //       cpts[tw] = twist / 9 - cpts[p] + cpts[t1] + cpts[t2];
+  //     } else {
+  //       // TODO
+  //     }
+  //   }
+  // }
 
 
   // 6. Compute inner boundary ribbons

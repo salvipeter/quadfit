@@ -270,17 +270,9 @@ static BSSurface ribbonToSurface(const std::array<BSCurve, 2> &ribbon) {
   return { basis.degree(), 1, basis.knots(), { 0, 0, 1, 1 }, cpts };
 }
 
-// coordinates of u when decomposed in the (v,w) system
-static Vector3D inSystem(const Vector3D &u, const Vector3D &v, const Vector3D &w) {
-  double v2 = v * v, w2 = w * w, uv = u * v, uw = u * w, vw = v * w;
-  double denom = v2 * w2 - vw * vw;
-  return Vector3D(w2 * uv - vw * uw, v2 * uw - vw * uv, 0) / denom;
-}
-
-double orientedAngle(const Vector3D &u, const Vector3D &v) {
-  auto w = ((u ^ v) ^ u).normalize();
-  Vector3D v1 = inSystem(v, u, w);
-  return std::atan2(v1[1], v1[0]);
+double orientedAngle(const Vector3D &u, const Vector3D &v, const Vector3D &n) {
+  double angle = std::acos(std::min(1.0, std::max(-1.0, u.normalized() * v.normalized())));
+  return angle * ((u ^ v) * n < 0 ? -1 : 1);
 }
 
 std::vector<BSSurface> QuadFit::fit() {
@@ -431,39 +423,28 @@ std::vector<BSSurface> QuadFit::fit() {
   for (size_t i = 0; i < quads.size(); ++i) {
     const auto &q = quads[i];
     auto &cpts = result[i].controlPoints();
-    auto projectToPlane = [&](size_t v, size_t t, const Vector3D &n) {
-      return cpts[t] + n * (n * (cpts[v] - cpts[t]));
-    };
     for (size_t side = 0; side < 4; ++side) {
       const auto &b = q.boundaries[side];
       if (b.on_ribbon)          // we already have everything we need here
         continue;
+      auto fixSecondDerivative = [&](bool at_end) {
+        size_t j = at_end ? 2 * side + 1 : 2 * side;
+        const auto &ends = endpoints[b.segment];
+        bool seg_end = b.reversed ? !at_end : at_end;
+        size_t v = seg_end ? ends.second : ends.first;
+        const auto &n = jet[v].normal;
+        auto der = (cpts[tangent_cps5[j]] - cpts[vertex_cps5[j]]) * 5 * (at_end ? -1 : 1);
+        size_t index = vertex_cps5[j] + ((int)tangent_cps5[j] - (int)vertex_cps5[j]) * 2;
+        double theta = orientedAngle(jet[v].d_max, der, n);
+        double k = jet[v].k_max * std::pow(cos(theta), 2) + jet[v].k_min * std::pow(sin(theta), 2);
+        double h = k * der.normSqr();
+        cpts[index] += n * (n * (cpts[vertex_cps5[j]] - cpts[index]) + h / 20);
+      };
       // TODO: we may need better 2nd derivatives at the outer vertices, as well
-      if (!q.boundaries[(side+3)%4].on_ribbon) {
-        bool at_end = side == 0 || side == 3;
-        size_t j = at_end ? 2 * side + 1 : 2 * side;
-        const auto &ends = endpoints[b.segment];
-        size_t v = at_end ? ends.second : ends.first;
-        const auto &n = jet[v].normal;
-        auto der = (cpts[tangent_cps5[j]] - cpts[vertex_cps5[j]]) * 5;
-        size_t index = vertex_cps5[j] + ((int)tangent_cps5[j] - (int)vertex_cps5[j]) * 2;
-        double theta = orientedAngle(jet[v].d_max, der);
-        double k = jet[v].k_max * cos(theta) * cos(theta) + jet[v].k_min * sin(theta) * sin(theta);
-        double h = k * der.normSqr();
-        cpts[index] = projectToPlane(index, vertex_cps5[j], n) + n * h;
-      } else if (!q.boundaries[(side+1)%4].on_ribbon) {
-        bool at_end = side == 1 || side == 2;
-        size_t j = at_end ? 2 * side + 1 : 2 * side;
-        const auto &ends = endpoints[b.segment];
-        size_t v = at_end ? ends.second : ends.first;
-        const auto &n = jet[v].normal;
-        auto der = (cpts[tangent_cps5[j]] - cpts[vertex_cps5[j]]) * 5;
-        size_t index = vertex_cps5[j] + ((int)tangent_cps5[j] - (int)vertex_cps5[j]) * 2;
-        double theta = orientedAngle(jet[v].d_max, der);
-        double k = jet[v].k_max * cos(theta) * cos(theta) + jet[v].k_min * sin(theta) * sin(theta);
-        double h = k * der.normSqr();
-        cpts[index] = projectToPlane(index, vertex_cps5[j], n) + n * h;
-      }
+      if (!q.boundaries[(side+3)%4].on_ribbon)
+        fixSecondDerivative(side == 0 || side == 3);
+      if (!q.boundaries[(side+1)%4].on_ribbon)
+        fixSecondDerivative(side == 1 || side == 2);
     }
   }
 

@@ -73,28 +73,28 @@ std::vector<BSSurface> fitSlices(const BSSurface &ribbon, const Point2DVector &s
 
   // Indirect solution using integration or interpolation
   // ---
-  // auto point = [&](double u) {
-  //   return ribbon.eval(u, 0.0);
-  // };
-  // auto derivative = [&](double u) {
-  //   VectorMatrix der;
-  //   ribbon.eval(u, 0.0, 1, der);
-  //   return der[0][1] * alpha.eval(u)[0];
-  // };
-  // auto sextic = multiplyBSplines(ribbon.basisU(), alpha.basis(), point, derivative);
+  auto point = [&](double u) {
+    return ribbon.eval(u, 0.0);
+  };
+  auto derivative = [&](double u) {
+    VectorMatrix der;
+    ribbon.eval(u, 0.0, 1, der);
+    return der[0][1] * alpha.eval(u)[0];
+  };
+  auto sextic = multiplyBSplines(ribbon.basisU(), alpha.basis(), point, derivative);
 
   // Direct solution on the Bezier segments
   // ---
-  PointVector cpts1, cpts2;
-  size_t n = ribbon.numControlPoints()[0];
-  size_t cross_deg = ribbon.basisV().degree();
-  for (size_t i = 0; i < n; ++i) {
-    cpts1.push_back(ribbon.controlPoint(i, 0));
-    cpts2.push_back((ribbon.controlPoint(i, 1) - ribbon.controlPoint(i, 0)) * cross_deg);
-  }
-  BSCurve c(ribbon.basisU().degree(), ribbon.basisU().knots(), cpts1);
-  BSCurve d(ribbon.basisU().degree(), ribbon.basisU().knots(), cpts2);
-  auto sextic = multiplyBSplinesByBezier(c, d, alpha);
+  // PointVector cpts1, cpts2;
+  // size_t n = ribbon.numControlPoints()[0];
+  // size_t cross_deg = ribbon.basisV().degree();
+  // for (size_t i = 0; i < n; ++i) {
+  //   cpts1.push_back(ribbon.controlPoint(i, 0));
+  //   cpts2.push_back((ribbon.controlPoint(i, 1) - ribbon.controlPoint(i, 0)) * cross_deg);
+  // }
+  // BSCurve c(ribbon.basisU().degree(), ribbon.basisU().knots(), cpts1);
+  // BSCurve d(ribbon.basisU().degree(), ribbon.basisU().knots(), cpts2);
+  // auto sextic = multiplyBSplinesByBezier(c, d, alpha);
 
   std::vector<BSSurface> result;
   for (size_t i = 1; i < sh.size(); ++i)

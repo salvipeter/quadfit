@@ -21,6 +21,7 @@ private:
       Geometry::BSSurface sextic;
     };
     std::array<Boundary, 4> boundaries; // u=0, v=0, u=1, v=1
+    std::array<Geometry::Vector3D, 4> twists; // u=v=0; u=1,v=0; u=v=1; u=0,v=1
     size_t resolution;
     Geometry::PointVector samples;
   };

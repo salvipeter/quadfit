@@ -9,6 +9,7 @@ CXXFLAGS=-Wall -pedantic -std=c++17 -O0 -g -I$(LIBGEOM) -I$(JETWRAP) -I$(EXTRACT
 LDFLAGS=-L$(LIBGEOM)/debug -lgeom -lomp
 
 quadfit-test: quadfit-test.o quadfit.o bspline-fit.o io.o \
+              fit-ribbon.o connect-g1.o multiply.o \
               $(EXTRACT)/bezier-extractions.o $(JETWRAP)/jet-wrapper.o
 	$(CXX) -o $@ $^ $(LDFLAGS)
 

@@ -1,11 +1,13 @@
 #include <cassert>
 #include <fstream>
 
-#include "jet-wrapper.hh"
+#include <jet-wrapper.hh>
 
 #include "quadfit.hh"
 
 #include "bspline-fit.hh"
+#include "fit-ribbon.hh"
+// #include "io.hh"
 
 using namespace Geometry;
 using JetWrapper::JetData;
@@ -256,6 +258,17 @@ static BSSurface elevateBezier(const BSSurface &surface, size_t target) {
   return result;
 }
 
+static BSSurface ribbonToSurface(const std::array<BSCurve, 2> &ribbon) {
+  const auto &basis = ribbon[0].basis();
+  PointVector cpts;
+  const auto &cp0 = ribbon[0].controlPoints(), &cp1 = ribbon[1].controlPoints();
+  for (size_t i = 0; i < cp0.size(); ++i) {
+    cpts.push_back(cp0[i]);
+    cpts.push_back(cp1[i]);
+  }
+  return { basis.degree(), 1, basis.knots(), { 0, 0, 1, 1 }, cpts };
+}
+
 std::vector<BSSurface> QuadFit::fit() {
   // Topology & geometry structures
   std::vector<Point3D> vertices;
@@ -309,8 +322,15 @@ std::vector<BSSurface> QuadFit::fit() {
     std::cout << "Ribbon #" << i + 1 << ":";
     for (auto s : rs) {
       const auto &b = quads[s.first].boundaries[s.second];
-      sh.emplace_back(b.s0, b.h0);
-      sh.emplace_back(b.s1, b.h1);
+      if (b.s0 < b.s1) {
+        if (sh.empty())
+          sh.emplace_back(b.s0, b.h0);
+        sh.emplace_back(b.s1, b.h1);
+      } else {
+        if (sh.empty())
+          sh.emplace_back(b.s1, b.h1);
+        sh.emplace_back(b.s0, b.h0);
+      }
       std::cout << ' ' << b.segment + 1;
     }
     std::cout << std::endl;
@@ -318,6 +338,15 @@ std::vector<BSSurface> QuadFit::fit() {
     for (const auto &s : sh)
       std::cout << ' ' << s[0];
     std::cout << std::endl;
+    auto slices = fitSlices(ribbonToSurface(ribbons[i]), sh);
+    for (size_t j = 0; j < slices.size(); ++j) {
+      auto s = rs[j];
+      auto &b = quads[s.first].boundaries[s.second];
+      b.sextic = slices[j];
+      if (b.reversed)
+        b.sextic.reverseU();
+      // writeSTL({b.sextic}, std::string("/tmp/ribbon_") + std::to_string(s.first) + "_" + std::to_string(s.second) + ".stl", 50);
+    }
   }
 
 
@@ -384,6 +413,10 @@ std::vector<BSSurface> QuadFit::fit() {
 
 
   // 4. Compute better second derivatives for the quad boundary curves
+
+  // First degree elevate to quartic, and guarantee at least 2 segments (6 CPs)
+  // for (auto &s : result)
+  //   s = elevateBezier(s, 4);
 
 
   // 5. Compute twist vectors

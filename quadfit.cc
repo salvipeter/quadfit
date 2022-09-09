@@ -1,4 +1,5 @@
 #include <cassert>
+#include <cmath>
 #include <fstream>
 
 #include <jet-wrapper.hh>
@@ -269,6 +270,19 @@ static BSSurface ribbonToSurface(const std::array<BSCurve, 2> &ribbon) {
   return { basis.degree(), 1, basis.knots(), { 0, 0, 1, 1 }, cpts };
 }
 
+// coordinates of u when decomposed in the (v,w) system
+static Vector3D inSystem(const Vector3D &u, const Vector3D &v, const Vector3D &w) {
+  double v2 = v * v, w2 = w * w, uv = u * v, uw = u * w, vw = v * w;
+  double denom = v2 * w2 - vw * vw;
+  return Vector3D(w2 * uv - vw * uw, v2 * uw - vw * uv, 0) / denom;
+}
+
+double orientedAngle(const Vector3D &u, const Vector3D &v) {
+  auto w = ((u ^ v) ^ u).normalize();
+  Vector3D v1 = inSystem(v, u, w);
+  return std::atan2(v1[1], v1[0]);
+}
+
 std::vector<BSSurface> QuadFit::fit() {
   // Topology & geometry structures
   std::vector<Point3D> vertices;
@@ -407,9 +421,51 @@ std::vector<BSSurface> QuadFit::fit() {
 
   // 4. Compute better second derivatives for the quad boundary curves
 
-  // First degree elevate to quartic, and guarantee at least 2 segments (6 CPs)
+  // First degree elevate to quintic, just for storing the second derivatives
   for (auto &s : result)
-    s = elevateBezier(s, 4);
+    s = elevateBezier(s, 5);
+
+  constexpr std::array<size_t, 8> vertex_cps5 = { 0, 5, 0, 30, 30, 35, 5, 35 };
+  constexpr std::array<size_t, 8> tangent_cps5 = { 1, 4, 6, 24, 31, 34, 11, 29 };
+
+  for (size_t i = 0; i < quads.size(); ++i) {
+    const auto &q = quads[i];
+    auto &cpts = result[i].controlPoints();
+    auto projectToPlane = [&](size_t v, size_t t, const Vector3D &n) {
+      return cpts[t] + n * (n * (cpts[v] - cpts[t]));
+    };
+    for (size_t side = 0; side < 4; ++side) {
+      const auto &b = q.boundaries[side];
+      if (b.on_ribbon)          // we already have everything we need here
+        continue;
+      // TODO: we may need better 2nd derivatives at the outer vertices, as well
+      if (!q.boundaries[(side+3)%4].on_ribbon) {
+        bool at_end = side == 0 || side == 3;
+        size_t j = at_end ? 2 * side + 1 : 2 * side;
+        const auto &ends = endpoints[b.segment];
+        size_t v = at_end ? ends.second : ends.first;
+        const auto &n = jet[v].normal;
+        auto der = (cpts[tangent_cps5[j]] - cpts[vertex_cps5[j]]) * 5;
+        size_t index = vertex_cps5[j] + ((int)tangent_cps5[j] - (int)vertex_cps5[j]) * 2;
+        double theta = orientedAngle(jet[v].d_max, der);
+        double k = jet[v].k_max * cos(theta) * cos(theta) + jet[v].k_min * sin(theta) * sin(theta);
+        double h = k * der.normSqr();
+        cpts[index] = projectToPlane(index, vertex_cps5[j], n) + n * h;
+      } else if (!q.boundaries[(side+1)%4].on_ribbon) {
+        bool at_end = side == 1 || side == 2;
+        size_t j = at_end ? 2 * side + 1 : 2 * side;
+        const auto &ends = endpoints[b.segment];
+        size_t v = at_end ? ends.second : ends.first;
+        const auto &n = jet[v].normal;
+        auto der = (cpts[tangent_cps5[j]] - cpts[vertex_cps5[j]]) * 5;
+        size_t index = vertex_cps5[j] + ((int)tangent_cps5[j] - (int)vertex_cps5[j]) * 2;
+        double theta = orientedAngle(jet[v].d_max, der);
+        double k = jet[v].k_max * cos(theta) * cos(theta) + jet[v].k_min * sin(theta) * sin(theta);
+        double h = k * der.normSqr();
+        cpts[index] = projectToPlane(index, vertex_cps5[j], n) + n * h;
+      }
+    }
+  }
 
 
   // 5. Compute twist vectors

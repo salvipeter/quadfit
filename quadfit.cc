@@ -446,31 +446,28 @@ std::vector<BSSurface> QuadFit::fit() {
 
 
   // 5. Compute twist vectors
-  // constexpr std::array<size_t, 16> corner_cps =
-  //   { 0, 1, 4, 5, 12, 8, 13, 9, 15, 14, 11, 10, 3, 7, 2, 6 };
-  // for (size_t i = 0; i < quads.size(); ++i) {
-  //   auto &cpts = result[i].controlPoints();
-  //   for (size_t side = 0; side < 4; ++side) {
-  //     size_t p = corner_cps[4*side], t1 = corner_cps[4*side+1];
-  //     size_t t2 = corner_cps[4*side+2], tw = corner_cps[4*side+3];
-  //     const auto &b = quads[i].boundaries[side];
-  //     const auto &bn = quads[i].boundaries[(side+1)%4];
-  //     if (b.on_ribbon && bn.on_ribbon) {
-  //       VectorVector der0, der1;
-  //       if (side == 0 || side == 3) {
-  //         ribbons[b.ribbon][0].eval(b.s0, 1, der0);
-  //         ribbons[b.ribbon][1].eval(b.s0, 1, der1);
-  //       } else {
-  //         ribbons[b.ribbon][0].eval(b.s1, 1, der0);
-  //         ribbons[b.ribbon][1].eval(b.s1, 1, der1);
-  //       }
-  //       auto twist = (der1[1] - der0[1]) * (b.s1 - b.s0);
-  //       cpts[tw] = twist / 9 - cpts[p] + cpts[t1] + cpts[t2];
-  //     } else {
-  //       // TODO
-  //     }
-  //   }
-  // }
+  constexpr std::array<size_t, 24> corner_cps5 = // S, Su, Sv, Suu, Svv, Suv
+    {
+       0,  6,  1, 12,  2,  7, // u = 0, v = 0
+       5, 11,  4, 17,  3, 10, // u = 0, v = 1
+      30, 24, 31, 18, 32, 25, // u = 1, v = 0
+      35, 29, 34, 23, 33, 28  // u = 1, v = 1
+    };
+  for (size_t i = 0; i < quads.size(); ++i) {
+    auto &cpts = result[i].controlPoints();
+    for (size_t side = 0; side < 4; ++side) {
+      size_t S = corner_cps[6*side], Su = corner_cps[6*side+1], Sv = corner_cps[6*side+2],
+        Suu = corner_cps[6*side+3], Svv = corner_cps[6*side+4], Suv = corner_cps[6*side+5];
+      const auto &b = quads[i].boundaries[side];
+      const auto &bn = quads[i].boundaries[(side+1)%4];
+      // If there are 2 ribbons here, we don't need to compute the twist
+      if () {
+        // If there is 1 fixed ribbon, take the twist from there
+      } else {
+        // Otherwise use the surface curvature to tweak the CP height
+      }
+    }
+  }
 
 
   // 6. Compute inner boundary ribbons

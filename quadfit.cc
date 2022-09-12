@@ -271,16 +271,22 @@ static BSSurface ribbonToSurface(const std::array<BSCurve, 2> &ribbon) {
   return { basis.degree(), 1, basis.knots(), { 0, 0, 1, 1 }, cpts };
 }
 
-// Returns { S, Su, Suu, Sv, Suv } where `v` is the cross-direction
+// Returns { S, Su, Suu, Sv, Suv }
+// - `u` is the side direction away from the specified corner
+// - `v` is the cross-direction, into the surface interior
 static VectorVector extractDerivatives(const BSSurface &surface, size_t side, bool at_end) {
   Point2DVector uvs = { {0,0},{0,1}, {0,0},{1,0}, {1,0},{1,1}, {0,1},{1,1} };
   auto uv = uvs[2 * side + (at_end ? 1 : 0)];
   bool swap_uv = side == 0 || side == 2;
+  double u_sign = at_end ? -1 : 1;
+  double v_sign = side == 2 || side == 3 ? -1 : 1;
   VectorMatrix der;
   surface.eval(uv[0], uv[1], 2, der);
   if (swap_uv)
-    return { der[0][0], der[0][1], der[0][2], der[1][0], der[1][1] };
-  return { der[0][0], der[1][0], der[2][0], der[0][1], der[1][1] };
+    return { der[0][0], der[0][1] * u_sign, der[0][2],
+             der[1][0] * v_sign, der[1][1] * u_sign * v_sign };
+  return { der[0][0], der[1][0] * u_sign, der[2][0],
+           der[0][1] * v_sign, der[1][1] * u_sign * v_sign };
 }
 
 std::vector<BSSurface> QuadFit::fit() {
@@ -322,7 +328,7 @@ std::vector<BSSurface> QuadFit::fit() {
   auto jet = JetWrapper::fit(vertices, JetWrapper::Nearest(all_points));
   // Note: only those at inner vertices should be used
 
-  writeVertexCurvatures(vertices, jet, "/tmp/curvatures.vtk"); // (just for debugging)
+  // writeVertexCurvatures(vertices, jet, "/tmp/curvatures.vtk");
 
 
   // 1. Simple C0 fit
@@ -512,40 +518,108 @@ std::vector<BSSurface> QuadFit::fit() {
         continue;
       const auto &adj = adjacent[b.segment];
       const auto &opp = adj[0].first == i ? adj[1] : adj[0];
+      const auto &b_opp = quads[opp.first].boundaries[opp.second];
       
-      // Assumes that quads are consistently oriented
-      // so the opposite cross-derivative curve should be reversed
       auto der1_0 = extractDerivatives(result[i], side, false);
       auto der1_1 = extractDerivatives(result[i], side, true);
       auto der2_0 = extractDerivatives(result[opp.first], opp.second, false);
       auto der2_1 = extractDerivatives(result[opp.first], opp.second, true);
       BSCurve c(4, { 0, 0, 0, 0, 0, 0.5, 1, 1, 1, 1, 1 },
                 {  der1_0[0],
-                   der1_0[0] + der1_0[1] / 4,
-                   der1_0[0] + der1_0[1] / 2 + der1_0[2],
-                   der1_1[0] - der1_1[1] / 2 + der1_1[2],
-                   der1_1[0] - der1_1[1] / 4,
+                   der1_0[0] + der1_0[1] / 8,
+                   der1_0[0] + der1_0[1] * 3 / 8 + der1_0[2] / 24,
+                   der1_1[0] + der1_1[1] * 3 / 8 + der1_1[2] / 24,
+                   der1_1[0] + der1_1[1] / 8,
                    der1_1[0] });
       BSCurve c1({
           der1_0[0] + der1_0[3],
           der1_0[0] + der1_0[1] / 3 + der1_0[3] + der1_0[4] / 3,
-          der1_1[0] - der1_1[1] / 3 + der1_1[3] - der1_1[4] / 3,
+          der1_1[0] + der1_1[1] / 3 + der1_1[3] + der1_1[4] / 3,
           der1_1[0] + der1_1[3]});
       c1.insertKnot(0.5, 1);
       BSCurve c2({
           der2_0[0] + der2_0[3],
           der2_0[0] + der2_0[1] / 3 + der2_0[3] + der2_0[4] / 3,
-          der2_1[0] - der2_1[1] / 3 + der2_1[3] - der2_1[4] / 3,
+          der2_1[0] + der2_1[1] / 3 + der2_1[3] + der2_1[4] / 3,
           der2_1[0] + der2_1[3]});
-      c2.reverse();
+      if (b.reversed != b_opp.reversed)
+        c2.reverse();
       c2.insertKnot(0.5, 1);
       b.sextic = connectG1(c, c1, c2);
-      writeSTL({b.sextic}, std::string("/tmp/sextic") + std::to_string(i) + "_" + std::to_string(side) + ".stl", 50);
+      // writeSTL({b.sextic}, std::string("/tmp/sextic") + std::to_string(i) + "_" + std::to_string(side) + ".stl", 50);
     }
   }
 
 
   // 7. Fill sextic patches
+  for (size_t i = 0; i < quads.size(); ++i) {
+    auto &quad = quads[i];
+    result[i] = elevateBezier(result[i], 6);
+    {
+      auto &s1 = quad.boundaries[0].sextic;
+      auto &s2 = quad.boundaries[2].sextic;
+      auto p1 = s1.basisU().knots().begin();
+      auto p2 = s2.basisU().knots().begin();
+      while (*p1 < 1 || *p2 < 1) {
+        if (*p1 < *p2) {
+          result[i].insertKnotV(*p1, 1);
+          s2.insertKnotU(*p1, 1);
+          p1++;
+        } else if (*p2 < *p1) {
+          result[i].insertKnotV(*p2, 1);
+          s1.insertKnotU(*p2, 1);
+          p2++;
+        } else {
+          result[i].insertKnotV(*p1, 1);
+          p1++;
+          p2++;
+        }
+      }
+    }
+    {
+      auto &s1 = quad.boundaries[1].sextic;
+      auto &s2 = quad.boundaries[3].sextic;
+      auto p1 = s1.basisU().knots().begin();
+      auto p2 = s2.basisU().knots().begin();
+      while (*p1 < 1 || *p2 < 1) {
+        if (*p1 < *p2) {
+          result[i].insertKnotU(*p1, 1);
+          s2.insertKnotU(*p1, 1);
+          p1++;
+        } else if (*p2 < *p1) {
+          result[i].insertKnotU(*p2, 1);
+          s1.insertKnotU(*p2, 1);
+          p2++;
+        } else {
+          result[i].insertKnotU(*p1, 1);
+          p1++;
+          p2++;
+        }
+      }
+    }
+    auto n_cpts = result[i].numControlPoints();
+    auto &s = result[i];
+    const auto &r0 = quad.boundaries[0].sextic;
+    const auto &r1 = quad.boundaries[1].sextic;
+    const auto &r2 = quad.boundaries[2].sextic;
+    const auto &r3 = quad.boundaries[3].sextic;
+    for (size_t j = 0; j < n_cpts[1]; ++j) {
+      s.controlPoint(0, j) = r0.controlPoint(j, 0);
+      s.controlPoint(1, j) =
+        r0.controlPoint(j, 0) + (r0.controlPoint(j, 1) - r0.controlPoint(j, 0)) / 6;
+      s.controlPoint(n_cpts[0] - 1, j) = r2.controlPoint(j, 0);
+      s.controlPoint(n_cpts[0] - 2, j) =
+        r2.controlPoint(j, 0) + (r2.controlPoint(j, 1) - r2.controlPoint(j, 0)) / 6;
+    }
+    for (size_t j = 0; j < n_cpts[0]; ++j) {
+      s.controlPoint(j, 0) = r1.controlPoint(j, 0);
+      s.controlPoint(j, 1) =
+        r1.controlPoint(j, 0) + (r1.controlPoint(j, 1) - r1.controlPoint(j, 0)) / 6;
+      s.controlPoint(j, n_cpts[1] - 1) = r3.controlPoint(j, 0);
+      s.controlPoint(j, n_cpts[1] - 2) =
+        r3.controlPoint(j, 0) + (r3.controlPoint(j, 1) - r3.controlPoint(j, 0)) / 6;
+    }
+  }
 
 
   // 8. Fit sampled points using inner control points

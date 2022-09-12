@@ -4,6 +4,24 @@
 
 using namespace Geometry;
 
+void writeCurves(const std::vector<BSCurve> &curves, std::string filename, size_t resolution) {
+  std::ofstream f(filename);
+  f.exceptions(std::ios::failbit | std::ios::badbit);
+  for (const auto &curve : curves) {
+    double lo = curve.basis().low(), hi = curve.basis().high();
+    for (size_t i = 0; i <= resolution; ++i) {
+      double u = lo + (double)i / resolution * (hi - lo);
+      f << "v " << curve.eval(u) << std::endl;
+    }
+  }
+  for (size_t j = 0; j < curves.size(); ++j) {
+    f << "l";
+    for (size_t i = 0; i <= resolution; ++i)
+      f << ' ' << j * (resolution + 1) + i + 1;
+    f << std::endl;
+  }
+}
+
 template<typename T>
 static void writeType(std::ostream &os, T x) {
   os.write(reinterpret_cast<const char *>(&x), sizeof(T));

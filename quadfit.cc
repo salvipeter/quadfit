@@ -7,8 +7,9 @@
 #include "quadfit.hh"
 
 #include "bspline-fit.hh"
+#include "connect-g1.hh"
 #include "fit-ribbon.hh"
-// #include "io.hh"
+#include "io.hh"
 
 using namespace Geometry;
 using JetWrapper::JetData;
@@ -270,11 +271,24 @@ static BSSurface ribbonToSurface(const std::array<BSCurve, 2> &ribbon) {
   return { basis.degree(), 1, basis.knots(), { 0, 0, 1, 1 }, cpts };
 }
 
+// Returns { S, Su, Suu, Sv, Suv } where `v` is the cross-direction
+static VectorVector extractDerivatives(const BSSurface &surface, size_t side, bool at_end) {
+  Point2DVector uvs = { {0,0},{0,1}, {0,0},{1,0}, {1,0},{1,1}, {0,1},{1,1} };
+  auto uv = uvs[2 * side + (at_end ? 1 : 0)];
+  bool swap_uv = side == 0 || side == 2;
+  VectorMatrix der;
+  surface.eval(uv[0], uv[1], 2, der);
+  if (swap_uv)
+    return { der[0][0], der[0][1], der[0][2], der[1][0], der[1][1] };
+  return { der[0][0], der[1][0], der[2][0], der[0][1], der[1][1] };
+}
+
 std::vector<BSSurface> QuadFit::fit() {
   // Topology & geometry structures
   std::vector<Point3D> vertices;
   std::vector<std::set<size_t>> quad_indices;       // vertex -> quads
   std::vector<std::pair<size_t, size_t>> endpoints; // segment -> from_vertex, to_vertex
+  std::vector<std::vector<std::pair<size_t, size_t>>> adjacent; // segment -> (quad,side)*
 
   // Build topology
 
@@ -291,11 +305,13 @@ std::vector<BSSurface> QuadFit::fit() {
     endpoints.emplace_back(j0, j1);
   }
   quad_indices.resize(vertices.size());
+  adjacent.resize(vertices.size());
   for (size_t i = 0; i < quads.size(); ++i)
     for (size_t j = 0; j < 4; ++j) {
       size_t s = quads[i].boundaries[j].segment;
       quad_indices[endpoints[s].first].insert(i);
       quad_indices[endpoints[s].second].insert(i);
+      adjacent[s].emplace_back(i, j);
     }
 
 
@@ -320,7 +336,6 @@ std::vector<BSSurface> QuadFit::fit() {
   for (size_t i = 0; i < ribbons.size(); ++i) {
     auto rs = ribbonSegments(i);
     Point2DVector sh;
-    // std::cout << "Ribbon #" << i + 1 << ":";
     for (auto s : rs) {
       const auto &b = quads[s.first].boundaries[s.second];
       if (b.s0 < b.s1) {
@@ -332,13 +347,7 @@ std::vector<BSSurface> QuadFit::fit() {
           sh.emplace_back(b.s1, b.h1);
         sh.emplace_back(b.s0, b.h0);
       }
-      // std::cout << ' ' << b.segment + 1;
     }
-    // std::cout << std::endl;
-    // std::cout << "s values:";
-    // for (const auto &s : sh)
-    //   std::cout << ' ' << s[0];
-    // std::cout << std::endl;
     auto slices = fitSlices(ribbonToSurface(ribbons[i]), sh);
     for (size_t j = 0; j < slices.size(); ++j) {
       auto s = rs[j];
@@ -346,7 +355,7 @@ std::vector<BSSurface> QuadFit::fit() {
       b.sextic = slices[j];
       if (b.reversed)
         b.sextic.reverseU();
-      // writeSTL({b.sextic}, std::string("/tmp/ribbon_") + std::to_string(s.first) + "_" + std::to_string(s.second) + ".stl", 50);
+      b.sextic.normalize();
     }
   }
 
@@ -456,14 +465,15 @@ std::vector<BSSurface> QuadFit::fit() {
   for (size_t i = 0; i < quads.size(); ++i) {
     auto &cpts = result[i].controlPoints();
     for (size_t side = 0; side < 4; ++side) {
-      size_t CP = corner_cps[6*side], CPu = corner_cps[6*side+1], CPv = corner_cps[6*side+2],
-        CPuu = corner_cps[6*side+3], CPvv = corner_cps[6*side+4], CPuv = corner_cps[6*side+5];
       const auto &b = quads[i].boundaries[side];
       const auto &bn = quads[i].boundaries[(side+1)%4];
 
       // If there are 2 ribbons here, we don't need to compute the twist
       if (b.on_ribbon && bn.on_ribbon)
         continue;
+
+      size_t CP = corner_cps[6*side], CPu = corner_cps[6*side+1], CPv = corner_cps[6*side+2],
+        CPuu = corner_cps[6*side+3], CPvv = corner_cps[6*side+4], CPuv = corner_cps[6*side+5];
 
       // If there is 1 fixed ribbon, take the twist from there
       if (b.on_ribbon) {
@@ -495,6 +505,44 @@ std::vector<BSSurface> QuadFit::fit() {
 
 
   // 6. Compute inner boundary ribbons
+  for (size_t i = 0; i < quads.size(); ++i) {
+    for (size_t side = 0; side < 4; ++side) {
+      auto &b = quads[i].boundaries[side];
+      if (b.on_ribbon)
+        continue;
+      const auto &adj = adjacent[b.segment];
+      const auto &opp = adj[0].first == i ? adj[1] : adj[0];
+      
+      // Assumes that quads are consistently oriented
+      // so the opposite cross-derivative curve should be reversed
+      auto der1_0 = extractDerivatives(result[i], side, false);
+      auto der1_1 = extractDerivatives(result[i], side, true);
+      auto der2_0 = extractDerivatives(result[opp.first], opp.second, false);
+      auto der2_1 = extractDerivatives(result[opp.first], opp.second, true);
+      BSCurve c(4, { 0, 0, 0, 0, 0, 0.5, 1, 1, 1, 1, 1 },
+                {  der1_0[0],
+                   der1_0[0] + der1_0[1] / 4,
+                   der1_0[0] + der1_0[1] / 2 + der1_0[2],
+                   der1_1[0] - der1_1[1] / 2 + der1_1[2],
+                   der1_1[0] - der1_1[1] / 4,
+                   der1_1[0] });
+      BSCurve c1({
+          der1_0[0] + der1_0[3],
+          der1_0[0] + der1_0[1] / 3 + der1_0[3] + der1_0[4] / 3,
+          der1_1[0] - der1_1[1] / 3 + der1_1[3] - der1_1[4] / 3,
+          der1_1[0] + der1_1[3]});
+      c1.insertKnot(0.5, 1);
+      BSCurve c2({
+          der2_0[0] + der2_0[3],
+          der2_0[0] + der2_0[1] / 3 + der2_0[3] + der2_0[4] / 3,
+          der2_1[0] - der2_1[1] / 3 + der2_1[3] - der2_1[4] / 3,
+          der2_1[0] + der2_1[3]});
+      c2.reverse();
+      c2.insertKnot(0.5, 1);
+      b.sextic = connectG1(c, c1, c2);
+      writeSTL({b.sextic}, std::string("/tmp/sextic") + std::to_string(i) + "_" + std::to_string(side) + ".stl", 50);
+    }
+  }
 
 
   // 7. Fill sextic patches

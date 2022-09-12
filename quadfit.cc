@@ -446,25 +446,49 @@ std::vector<BSSurface> QuadFit::fit() {
 
 
   // 5. Compute twist vectors
-  constexpr std::array<size_t, 24> corner_cps5 = // S, Su, Sv, Suu, Svv, Suv
+  constexpr std::array<size_t, 24> corner_cps = // S, Su, Sv, Suu, Svv, Suv
     {
        0,  6,  1, 12,  2,  7, // u = 0, v = 0
-       5, 11,  4, 17,  3, 10, // u = 0, v = 1
       30, 24, 31, 18, 32, 25, // u = 1, v = 0
-      35, 29, 34, 23, 33, 28  // u = 1, v = 1
+      35, 29, 34, 23, 33, 28, // u = 1, v = 1
+       5, 11,  4, 17,  3, 10  // u = 0, v = 1
     };
   for (size_t i = 0; i < quads.size(); ++i) {
     auto &cpts = result[i].controlPoints();
     for (size_t side = 0; side < 4; ++side) {
-      size_t S = corner_cps[6*side], Su = corner_cps[6*side+1], Sv = corner_cps[6*side+2],
-        Suu = corner_cps[6*side+3], Svv = corner_cps[6*side+4], Suv = corner_cps[6*side+5];
+      size_t CP = corner_cps[6*side], CPu = corner_cps[6*side+1], CPv = corner_cps[6*side+2],
+        CPuu = corner_cps[6*side+3], CPvv = corner_cps[6*side+4], CPuv = corner_cps[6*side+5];
       const auto &b = quads[i].boundaries[side];
       const auto &bn = quads[i].boundaries[(side+1)%4];
+
       // If there are 2 ribbons here, we don't need to compute the twist
-      if () {
-        // If there is 1 fixed ribbon, take the twist from there
+      if (b.on_ribbon && bn.on_ribbon)
+        continue;
+
+      // If there is 1 fixed ribbon, take the twist from there
+      if (b.on_ribbon) {
+        VectorMatrix der;
+        b.sextic.eval(b.sextic.basisU().high(), 0, 1, der);
+        cpts[CPuv] = der[1][1] / 25 + cpts[CPu] + cpts[CPv] - cpts[CP];
+      } else if (bn.on_ribbon) {
+        VectorMatrix der;
+        bn.sextic.eval(bn.sextic.basisU().low(), 0, 1, der);
+        cpts[CPuv] = der[1][1] / 25 + cpts[CPu] + cpts[CPv] - cpts[CP];
       } else {
         // Otherwise use the surface curvature to tweak the CP height
+        auto Su = (cpts[CPu] - cpts[CP]) * 5 * (side == 1 || side == 2 ? -1 : 1);
+        auto Sv = (cpts[CPv] - cpts[CP]) * 5 * (side == 2 || side == 3 ? -1 : -1);
+        auto Suu = (cpts[CPuu] - cpts[CPu] * 2 + cpts[CP]) * 20;
+        auto Svv = (cpts[CPvv] - cpts[CPv] * 2 + cpts[CP]) * 20;
+        bool at_end = side == 1 || side == 2;
+        const auto &ends = endpoints[b.segment];
+        bool seg_end = b.reversed ? !at_end : at_end;
+        size_t v = seg_end ? ends.second : ends.first;
+        const auto &n = jet[v].normal;
+        double K = jet[v].k_max * jet[v].k_min;
+        double h = std::sqrt((Suu * n) * (Svv * n) - K * (Su ^ Sv).normSqr());
+        double sign = (side == 1 || side == 3) ? -1 : 1;
+        cpts[CPuv] += n * (n * (cpts[CP] - cpts[CPuv]) + h * sign / 25);
       }
     }
   }

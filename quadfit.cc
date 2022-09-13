@@ -177,10 +177,8 @@ std::vector<BSSurface> QuadFit::initialFit() const {
         double u = rev ? curve.basis().high() : curve.basis().low();
         VectorVector der;
         auto p = curve.eval(u, deriv ? 1 : 0, der);
-        if (deriv) {
-          double interval = curve.basis().high() - curve.basis().low();
-          return p + der[1] / 3 * (rev ? -1 : 1) * interval;
-        }
+        if (deriv)
+          return p + der[1] * (rev ? -1 : 1);
         return p;
       };
       cpts[j] = getCP(0);
@@ -188,6 +186,15 @@ std::vector<BSSurface> QuadFit::initialFit() const {
       cpts[12+j] = getCP(2);
       cpts[3+j*4] = getCP(3);
     }
+    auto setTangentLength = [&](size_t p1, size_t t1, size_t t2, size_t p2) {
+      double d = (cpts[p2] - cpts[p1]).norm() / 3;
+      cpts[t1] = cpts[p1] + (cpts[t1] - cpts[p1]).normalize() * d;
+      cpts[t2] = cpts[p2] + (cpts[t2] - cpts[p2]).normalize() * d;
+    };
+    setTangentLength(0, 1, 2, 3);
+    setTangentLength(0, 4, 8, 12);
+    setTangentLength(12, 13, 14, 15);
+    setTangentLength(3, 7, 11, 15);
     auto setTwist = [&](size_t p, size_t d1, size_t d2, size_t t) {
       cpts[t] = cpts[d1] + (cpts[d2] - cpts[p]);
     };
@@ -315,12 +322,12 @@ void QuadFit::correctFirstDerivatives(BSSurface &cubic, size_t quad_index) const
     if (b.on_ribbon) {
       // Compute first derivative from the fitted ribbon
       VectorMatrix der;
-      const auto &basis = b.sextic.basisU();
-      double interval = basis.high() - basis.low();
-      b.sextic.eval(basis.low(), 0, 1, der);
-      cpts[tangent_cps[2*side]] = cpts[vertex_cps[2*side]] + der[1][0] / 3 * interval;
-      b.sextic.eval(basis.high(), 0, 1, der);
-      cpts[tangent_cps[2*side+1]] = cpts[vertex_cps[2*side+1]] - der[1][0] / 3 * interval;
+      const auto &knots = b.sextic.basisU().knots();
+      double lo = knots[7] - knots[1], hi = knots.rbegin()[1] - knots.rbegin()[7];
+      b.sextic.eval(knots[6], 0, 1, der);
+      cpts[tangent_cps[2*side]] = cpts[vertex_cps[2*side]] + der[1][0] / 3 * lo;
+      b.sextic.eval(knots.rbegin()[6], 0, 1, der);
+      cpts[tangent_cps[2*side+1]] = cpts[vertex_cps[2*side+1]] - der[1][0] / 3 * hi;
     } else {
       // In the interior project to the vertices' normal plane
       auto projectToPlane = [&](size_t v, size_t t, const Vector3D &n) {

@@ -1,4 +1,5 @@
 #include <fstream>
+#include <iterator>
 
 #include "io.hh"
 
@@ -19,6 +20,25 @@ void writeCurves(const std::vector<BSCurve> &curves, std::string filename, size_
     for (size_t i = 0; i <= resolution; ++i)
       f << ' ' << j * (resolution + 1) + i + 1;
     f << std::endl;
+  }
+}
+
+void writeQDS(const std::vector<Geometry::BSSurface> &surfaces, std::string filename) {
+  std::ofstream f(filename);
+  f.exceptions(std::ios::failbit | std::ios::badbit);
+  f << surfaces.size() << std::endl;
+  for (const auto &s : surfaces) {
+    f << s.basisU().degree() << ' ' << s.basisV().degree() << std::endl;
+    f << s.basisU().knots().size() << ' ';
+    std::copy(s.basisU().knots().begin(), s.basisU().knots().end(),
+              std::ostream_iterator<double>(f, " "));
+    f << std::endl;
+    f << s.basisV().knots().size() << ' ';
+    std::copy(s.basisV().knots().begin(), s.basisV().knots().end(),
+              std::ostream_iterator<double>(f, " "));
+    f << std::endl;
+    std::copy(s.controlPoints().begin(), s.controlPoints().end(),
+              std::ostream_iterator<Point3D>(f, "\n"));
   }
 }
 

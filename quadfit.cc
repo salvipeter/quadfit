@@ -483,7 +483,7 @@ BSSurface QuadFit::innerBoundaryRibbon(const std::vector<BSSurface> &quintic_pat
       der1_0[0] + der1_0[1] / 3 + der1_0[3] + der1_0[4] / 3,
       der1_1[0] + der1_1[1] / 3 + der1_1[3] + der1_1[4] / 3,
       der1_1[0] + der1_1[3]});
-  c1.insertKnot(0.5, 1);
+  c1 = c1.insertKnot(0.5, 1);
   BSCurve c2({
       der2_0[0] + der2_0[3],
       der2_0[0] + der2_0[1] / 3 + der2_0[3] + der2_0[4] / 3,
@@ -491,22 +491,23 @@ BSSurface QuadFit::innerBoundaryRibbon(const std::vector<BSSurface> &quintic_pat
       der2_1[0] + der2_1[3]});
   if (b.reversed != b_opp.reversed)
     c2.reverse();
-  c2.insertKnot(0.5, 1);
+  c2 = c2.insertKnot(0.5, 1);
   return connectG1(c, c1, c2);
 }
 
-static void unifyKnots(BSSurface &sextic, const BSSurface &s1, const BSSurface &s2, bool u_dir) {
+static void unifyKnots(BSSurface &sextic, BSSurface &s1, BSSurface &s2, bool u_dir) {
   auto p1 = s1.basisU().knots().begin();
   auto p2 = s2.basisU().knots().begin();
+  auto t1 = s1, t2 = s2;
   while (*p1 < 1 || *p2 < 1) {
     double to_insert;
     if (*p1 < *p2) {
       to_insert = *p1;
-      s2.insertKnotU(*p1, 1);
+      t2 = t2.insertKnotU(*p1, 1);
       p1++;
     } else if (*p2 < *p1) {
       to_insert = *p2;
-      s1.insertKnotU(*p2, 1);
+      t1 = t1.insertKnotU(*p2, 1);
       p2++;
     } else {
       to_insert = *p1;
@@ -514,30 +515,36 @@ static void unifyKnots(BSSurface &sextic, const BSSurface &s1, const BSSurface &
       p2++;
     }
     if (u_dir)
-      sextic.insertKnotU(to_insert, 1);
+      sextic = sextic.insertKnotU(to_insert, 1);
     else
-      sextic.insertKnotV(to_insert, 1);
+      sextic = sextic.insertKnotV(to_insert, 1);
   }
+  s1 = t1;
+  s2 = t2;
 }
 
 static void fillSextic(BSSurface &s, const BSSurface &r0, const BSSurface &r1,
                        const BSSurface &r2, const BSSurface &r3) {
   auto n_cpts = s.numControlPoints();
+  const auto &knots_v = s.basisV().knots();
+  double lo = knots_v[7] - knots_v[1], hi = knots_v.rbegin()[1] - knots_v.rbegin()[7];
   for (size_t j = 0; j < n_cpts[1]; ++j) {
     s.controlPoint(0, j) = r0.controlPoint(j, 0);
     s.controlPoint(1, j) =
-      r0.controlPoint(j, 0) + (r0.controlPoint(j, 1) - r0.controlPoint(j, 0)) / 6;
+      r0.controlPoint(j, 0) + (r0.controlPoint(j, 1) - r0.controlPoint(j, 0)) / 6 * lo;
     s.controlPoint(n_cpts[0] - 1, j) = r2.controlPoint(j, 0);
     s.controlPoint(n_cpts[0] - 2, j) =
-      r2.controlPoint(j, 0) + (r2.controlPoint(j, 1) - r2.controlPoint(j, 0)) / 6;
+      r2.controlPoint(j, 0) + (r2.controlPoint(j, 1) - r2.controlPoint(j, 0)) / 6 * hi;
   }
+  const auto &knots_u = s.basisU().knots();
+  lo = knots_u[7] - knots_u[1]; hi = knots_u.rbegin()[1] - knots_u.rbegin()[7];
   for (size_t j = 0; j < n_cpts[0]; ++j) {
     s.controlPoint(j, 0) = r1.controlPoint(j, 0);
     s.controlPoint(j, 1) =
-      r1.controlPoint(j, 0) + (r1.controlPoint(j, 1) - r1.controlPoint(j, 0)) / 6;
+      r1.controlPoint(j, 0) + (r1.controlPoint(j, 1) - r1.controlPoint(j, 0)) / 6 * lo;
     s.controlPoint(j, n_cpts[1] - 1) = r3.controlPoint(j, 0);
     s.controlPoint(j, n_cpts[1] - 2) =
-      r3.controlPoint(j, 0) + (r3.controlPoint(j, 1) - r3.controlPoint(j, 0)) / 6;
+      r3.controlPoint(j, 0) + (r3.controlPoint(j, 1) - r3.controlPoint(j, 0)) / 6 * hi;
   }
 }
 

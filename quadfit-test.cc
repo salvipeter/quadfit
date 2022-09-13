@@ -24,10 +24,12 @@ int main(int argc, char **argv) {
   std::cout << "Fit of " << surfaces.size() << " surfaces completed" << std::endl;
 
   std::cout << "Output resolution: " << resolution << std::endl;
+  writeQDS(surfaces, "/tmp/surfaces.qds");
   writeSTL(surfaces, "/tmp/surfaces.stl", resolution);
   writeControlNet(surfaces, "/tmp/controls.obj");
   writeBoundaries(surfaces, "/tmp/boundaries.obj", resolution);
-  std::cout << "Surfaces written to /tmp/surfaces.stl" << std::endl;
+  std::cout << "Surface data written to /tmp/surfaces.qds" << std::endl;
+  std::cout << "Surface mesh written to /tmp/surfaces.stl" << std::endl;
   std::cout << "Control nets written to /tmp/controls.obj" << std::endl;
   std::cout << "Boundaries written to /tmp/boundaries.obj" << std::endl;
 }

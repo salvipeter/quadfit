@@ -1,0 +1,17 @@
+QDS File Format
+---------------
+
+<number of quads>
+<u-degree> <v-degree>         # Quad 1 starts here
+<number of u-knots> <u-knot values: u1 u2 ...>
+<number of v-knots> <v-knot values: v1 v2 ...>
+<control point 1 1: x y z>
+<control point 1 2: x y z>
+...
+<control point 1 m: x y z>    # m = number of v-knots - v-degree - 1
+<control point 2 1: x y z>
+<control point 2 2: x y z>
+...
+<control point n m: x y z>    # n = number of u-knots - u-degree - 1
+<u-degree> <v-degree>         # Quad 2 starts here
+...

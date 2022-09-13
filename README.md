@@ -13,3 +13,5 @@ Requires:
 Currently the input can be given in a `.PWGB` file (see `pwgb-spec.txt`).
 
 The test program generates a single mesh for the surface, and another with the control nets.
+The boundary curves of all quads are written to an `.OBJ` file as polylines.
+The surfaces are also exported in `.QDS` format (see `qds-spec.txt`).

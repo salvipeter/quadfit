@@ -358,8 +358,8 @@ void QuadFit::correctFirstDerivatives(BSSurface &cubic, size_t quad_index) const
 }
 
 void QuadFit::correctSecondDerivatives(BSSurface &quintic, size_t quad_index) const {
-  static constexpr std::array<size_t, 8> vertex_cps5 = { 0, 5, 0, 30, 30, 35, 5, 35 };
-  static constexpr std::array<size_t, 8> tangent_cps5 = { 1, 4, 6, 24, 31, 34, 11, 29 };
+  static constexpr std::array<size_t, 8> vertex_cps = { 0, 5, 0, 30, 30, 35, 5, 35 };
+  static constexpr std::array<size_t, 8> tangent_cps = { 1, 4, 6, 24, 31, 34, 11, 29 };
 
   const auto &q = quads[quad_index];
   auto &cpts = quintic.controlPoints();
@@ -367,19 +367,20 @@ void QuadFit::correctSecondDerivatives(BSSurface &quintic, size_t quad_index) co
     const auto &b = q.boundaries[side];
     if (b.on_ribbon)          // we already have everything we need here
       continue;
+    // Project the second derivative into the plane at the constrained height
     auto fix = [&](bool at_end) {
       size_t j = at_end ? 2 * side + 1 : 2 * side;
       const auto &ends = endpoints[b.segment];
       bool seg_end = b.reversed ? !at_end : at_end;
       size_t v = seg_end ? ends.second : ends.first;
       const auto &n = jet[v].normal;
-      auto der = (cpts[tangent_cps5[j]] - cpts[vertex_cps5[j]]) * 5 * (at_end ? -1 : 1);
-      size_t index = vertex_cps5[j] + ((int)tangent_cps5[j] - (int)vertex_cps5[j]) * 2;
+      auto der = (cpts[tangent_cps[j]] - cpts[vertex_cps[j]]) * 5 * (at_end ? -1 : 1);
+      size_t index = vertex_cps[j] + ((int)tangent_cps[j] - (int)vertex_cps[j]) * 2;
       double cos_theta = jet[v].d_max * der.normalized();
       double c2 = cos_theta * cos_theta, s2 = 1 - c2;
       double k = jet[v].k_max * c2 + jet[v].k_min * s2;
       double h = k * der.normSqr();
-      cpts[index] += n * (n * (cpts[vertex_cps5[j]] - cpts[index]) + h / 20);
+      cpts[index] += n * (n * (cpts[vertex_cps[j]] - cpts[index]) + h / 20);
     };
     // TODO: we may need better 2nd derivatives at the outer vertices, as well
     if (!q.boundaries[(side+3)%4].on_ribbon)
@@ -571,7 +572,6 @@ std::vector<BSSurface> QuadFit::fit() {
     }
   }
 
-
   // 3. Compute better first derivatives for the quad boundary curves
   for (size_t i = 0; i < quads.size(); ++i)
     correctFirstDerivatives(result[i], i);

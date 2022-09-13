@@ -51,8 +51,9 @@ directions are fitted at the inner vertices with CGAL jet fitting,
 using the supplied sample points.
 
 1. Create an initial fit on all quads. This is a simple bicubic Bézier
-   surface interpolating the vertices and the first derivatives of the
-   segments. Twists are set up using the parallelogram rule.
+   surface interpolating the vertices and the tangents of the segments
+   (tangent control points are placed using the 1/3 rule). Twists are
+   set up using the parallelogram rule.
 
 2. Local ribbons are created along the boundaries by multiplying the
    associated part of the ribbon with a scaling function. This scaling

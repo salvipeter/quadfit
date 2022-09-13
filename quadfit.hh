@@ -1,12 +1,12 @@
 #pragma once
 
-#include <set>
-
 #include <geometry.hh>
+#include <jet-wrapper.hh>
 
 class QuadFit {
 public:
   std::string readPWGB(std::string filename);      // returns model description
+  void update();                                   // automatically called by readPWGB()
   std::vector<Geometry::BSSurface> fit();
 
 private:
@@ -28,8 +28,22 @@ private:
 
   std::vector<Geometry::BSSurface> initialFit() const;
   std::vector<std::pair<size_t, size_t>> ribbonSegments(size_t i) const;
+  void correctFirstDerivatives(Geometry::BSSurface &cubic, size_t quad_index) const;
+  void correctSecondDerivatives(Geometry::BSSurface &quintic, size_t quad_index) const;
+  void correctTwists(Geometry::BSSurface &quintic, size_t quad_index) const;
+  Geometry::BSSurface innerBoundaryRibbon(const std::vector<Geometry::BSSurface> &quintic_patches,
+                                          size_t quad_index, size_t side) const;
 
   std::vector<Ribbon> ribbons;
   std::vector<Geometry::BSCurve> segments;
   std::vector<Quad> quads;
+
+  // Additional topology & geometry structures
+  // (updated automatically by update())
+  using IndexPair = std::pair<size_t, size_t>;
+  using IndexPairVector = std::vector<IndexPair>;
+  std::vector<Geometry::Point3D> vertices; // all segment endpoints
+  IndexPairVector endpoints;               // segment -> from_vertex, to_vertex
+  std::vector<IndexPairVector> adjacency;  // segment -> (quad,side)*
+  std::vector<JetWrapper::JetData> jet;    // jet-fitted principal curvatures
 };

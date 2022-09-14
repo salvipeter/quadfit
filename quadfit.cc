@@ -626,9 +626,43 @@ std::vector<BSSurface> QuadFit::fit() {
                quad.boundaries[2].sextic, quad.boundaries[3].sextic);
   }
 
+#define PRINT_G1_ERRORS
+#ifdef PRINT_G1_ERRORS
+  std::cout << "Maximal G1 errors:" << std::endl;
+  for (const auto &adj : adjacency) {
+    if (adj.size() < 2)
+      continue;
+    std::cout << "Quad #" << adj[0].first + 1 << " - #" << adj[1].first + 1 << ": ";
+    const auto &q1 = result[adj[0].first];
+    const auto &q2 = result[adj[1].first];
+    size_t side1 = adj[0].second, side2 = adj[1].second;
+    bool reversed = quads[adj[0].first].boundaries[side1].reversed !=
+      quads[adj[1].first].boundaries[side2].reversed;
+    double max_error = 0;
+    size_t resolution = 100;
+    auto evalNormal = [&](const BSSurface &s, size_t side, double u) {
+      VectorMatrix der;
+      if (side == 0 || side == 2) // v-side
+        s.eval(side == 0 ? 0 : 1, u, 1, der);
+      else // u-side
+        s.eval(u, side == 1 ? 0 : 1, 1, der);
+      return (der[1][0] ^ der[0][1]).normalize();
+    };
+    for (size_t i = 0; i <= resolution; ++i) {
+      double u = (double)i / resolution;
+      auto n1 = evalNormal(q1, side1, u);
+      auto n2 = evalNormal(q2, side2, reversed ? 1 - u : u);
+      double err = std::acos(std::min(std::max(n1 * n2, -1.0), 1.0)) * 180 / M_PI;
+      if (err > max_error)
+        max_error = err;
+    }
+    std::cout << max_error << " degrees" << std::endl;
+  }
+#endif
+
   // 8a. Use a mask to compute the placement of the inner control points
-  for (auto &r : result)
-    applyMask(r, DiscreteMask::BIHARMONIC);
+  // for (auto &r : result)
+  //   applyMask(r, DiscreteMask::BIHARMONIC);
 
   // 8. Fit sampled points using inner control points
   // for (size_t i = 0; i < quads.size(); ++i) {

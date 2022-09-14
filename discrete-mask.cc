@@ -42,7 +42,7 @@ void applyMask(Geometry::BSSurface &surface, DiscreteMask type) {
             continue;
           size_t i1 = i + di - 2, j1 = j + dj - 2;
           if (i1 < 2 || i1 >= n - 2 || j1 < 2 || j1 >= m - 2)
-            b.row(k) = VecMap(surface.controlPoint(i1, j1).data()) * -w;
+            b.row(k) -= VecMap(surface.controlPoint(i1, j1).data()) * w;
           else
             A(k, (i1 - 2) * (m - 4) + j1 - 2) = w;
         }

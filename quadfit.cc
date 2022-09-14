@@ -6,6 +6,7 @@
 
 #include "bspline-fit.hh"
 #include "connect-g1.hh"
+#include "discrete-mask.hh"
 #include "fit-ribbon.hh"
 #include "io.hh"
 
@@ -533,8 +534,8 @@ static void unifyKnots(BSSurface &sextic, BSSurface &s1, BSSurface &s2, bool u_d
 static void fillSextic(BSSurface &s, const BSSurface &r0, const BSSurface &r1,
                        const BSSurface &r2, const BSSurface &r3) {
   auto n_cpts = s.numControlPoints();
-  const auto &knots_v = s.basisV().knots();
-  double lo = knots_v[7] - knots_v[1], hi = knots_v.rbegin()[1] - knots_v.rbegin()[7];
+  const auto &knots_u = s.basisU().knots();
+  double lo = knots_u[7] - knots_u[1], hi = knots_u.rbegin()[1] - knots_u.rbegin()[7];
   for (size_t j = 0; j < n_cpts[1]; ++j) {
     s.controlPoint(0, j) = r0.controlPoint(j, 0);
     s.controlPoint(1, j) =
@@ -543,8 +544,8 @@ static void fillSextic(BSSurface &s, const BSSurface &r0, const BSSurface &r1,
     s.controlPoint(n_cpts[0] - 2, j) =
       r2.controlPoint(j, 0) + (r2.controlPoint(j, 1) - r2.controlPoint(j, 0)) / 6 * hi;
   }
-  const auto &knots_u = s.basisU().knots();
-  lo = knots_u[7] - knots_u[1]; hi = knots_u.rbegin()[1] - knots_u.rbegin()[7];
+  const auto &knots_v = s.basisV().knots();
+  lo = knots_v[7] - knots_v[1]; hi = knots_v.rbegin()[1] - knots_v.rbegin()[7];
   for (size_t j = 0; j < n_cpts[0]; ++j) {
     s.controlPoint(j, 0) = r1.controlPoint(j, 0);
     s.controlPoint(j, 1) =
@@ -624,6 +625,10 @@ std::vector<BSSurface> QuadFit::fit() {
     fillSextic(result[i], quad.boundaries[0].sextic, quad.boundaries[1].sextic,
                quad.boundaries[2].sextic, quad.boundaries[3].sextic);
   }
+
+  // 8a. Use a mask to compute the placement of the inner control points
+  for (auto &r : result)
+    applyMask(r, DiscreteMask::BIHARMONIC);
 
   // 8. Fit sampled points using inner control points
   // for (size_t i = 0; i < quads.size(); ++i) {

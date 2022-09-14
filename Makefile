@@ -12,7 +12,7 @@ LDFLAGS=-lasan -L. -L$(LIBGEOM)/debug -lgeom -lomp
 quadfit-test: quadfit-test.o libquadfit.a
 	$(CXX) -o $@ $< -lquadfit $(LDFLAGS)
 
-libquadfit.a: quadfit.o bspline-fit.o io.o \
+libquadfit.a: quadfit.o bspline-fit.o io.o discrete-mask.o \
               fit-ribbon.o connect-g1.o multiply.o \
               $(EXTRACT)/bezier-extractions.o $(JETWRAP)/jet-wrapper.o
 	$(AR) r -o $@ $^

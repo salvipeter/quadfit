@@ -68,6 +68,9 @@ using the supplied sample points.
 
 1. The twist control points of the cubic patches are updated to
    reflect those of the corresponding ribbons, where applicable.
+   Where there is no adjacent ribbon, the twist control points are
+   computed as the quasi-intersection of lines going through the
+   adjacent fixed control points.
 
 1. The cubic patches are degree elevated to quintic, and then the
    second derivative control points are updated. At the ends of

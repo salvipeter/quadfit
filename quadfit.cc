@@ -365,6 +365,18 @@ void QuadFit::correctFirstDerivatives(BSSurface &cubic, size_t quad_index) const
   }
 }
 
+static Point3D intersectLines(const Point3D &ap, const Vector3D &ad,
+                              const Point3D &bp, const Vector3D &bd) {
+  double a = ad * ad, b = ad * bd, c = bd * bd;
+  double d = ad * (ap - bp), e = bd * (ap - bp);
+  if (a * c - b * b < 1.0e-7)
+    return ap;
+  double D = a * c - b * b;
+  double s = (b * e - c * d) / D;
+  double t = (a * e - b * d) / D;
+  return ((ap + ad * s) + (bp + bd * t)) / 2;
+}
+
 // At the corner between side `side` and `side+1`
 void QuadFit::correctCubicTwists(BSSurface &cubic, size_t quad_index) const {
   static constexpr std::array<size_t, 16> corner_cps = // S, Su, Sv, Suv
@@ -375,6 +387,8 @@ void QuadFit::correctCubicTwists(BSSurface &cubic, size_t quad_index) const {
        3,  7,  2,  6  // u = 0, v = 1
     };
   auto &cpts = cubic.controlPoints();
+
+  std::vector<size_t> not_fixed;
 
   for (size_t side = 0; side < 4; ++side) {
     const auto &b = quads[quad_index].boundaries[side];
@@ -394,6 +408,26 @@ void QuadFit::correctCubicTwists(BSSurface &cubic, size_t quad_index) const {
       VectorMatrix der;
       bn.sextic.eval(bn.sextic.basisU().low(), 0, 1, der);
       cpts[CPuv] = der[1][1] / 9 + cpts[CPu] + cpts[CPv] - cpts[CP];
+    } else
+      not_fixed.push_back(CPuv);
+  }
+
+  // For the time being, set the rest to the mean of the adjacent CPs,
+  // or at the quasi-intersection of two fixed segments
+  if (not_fixed.size() == 1) {
+    size_t i = not_fixed[0];
+    cpts[i] = (cpts[i-1] + cpts[i+1] + cpts[i-4] + cpts[i+4]) / 4;
+  } else {
+    size_t i = not_fixed[0], j = not_fixed[1];
+    if (i > j)
+      std::swap(i, j);
+    size_t a = i - (j - i), b = j + (j - i);
+    if (j - i == 1) {
+      cpts[i] = intersectLines(cpts[a], cpts[b] - cpts[a], cpts[i-4], cpts[i+4] - cpts[i-4]);
+      cpts[j] = intersectLines(cpts[a], cpts[b] - cpts[a], cpts[j-4], cpts[j+4] - cpts[j-4]);
+    } else {
+      cpts[i] = intersectLines(cpts[a], cpts[b] - cpts[a], cpts[i-1], cpts[i+1] - cpts[i-1]);
+      cpts[j] = intersectLines(cpts[a], cpts[b] - cpts[a], cpts[j-1], cpts[j+1] - cpts[j-1]);
     }
   }
 }

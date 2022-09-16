@@ -365,6 +365,39 @@ void QuadFit::correctFirstDerivatives(BSSurface &cubic, size_t quad_index) const
   }
 }
 
+// At the corner between side `side` and `side+1`
+void QuadFit::correctCubicTwists(BSSurface &cubic, size_t quad_index) const {
+  static constexpr std::array<size_t, 16> corner_cps = // S, Su, Sv, Suv
+    {
+       0,  4,  1,  5, // u = 0, v = 0
+      12,  8, 13,  9, // u = 1, v = 0
+      15, 11, 14, 10, // u = 1, v = 1
+       3,  7,  2,  6  // u = 0, v = 1
+    };
+  auto &cpts = cubic.controlPoints();
+
+  for (size_t side = 0; side < 4; ++side) {
+    const auto &b = quads[quad_index].boundaries[side];
+    const auto &bn = quads[quad_index].boundaries[(side+1)%4];
+
+    size_t CP = corner_cps[4*side], CPu = corner_cps[4*side+1],
+      CPv = corner_cps[4*side+2], CPuv = corner_cps[4*side+3];
+
+    // If there is a fixed ribbon, take the twist from there
+    // (assuming that 2 fixed ribbons share a common twist);
+    // otherwise we will need the 2nd derivatives, see correctTwists()
+    if (b.on_ribbon) {
+      VectorMatrix der;
+      b.sextic.eval(b.sextic.basisU().high(), 0, 1, der);
+      cpts[CPuv] = der[1][1] / 9 + cpts[CPu] + cpts[CPv] - cpts[CP];
+    } else if (bn.on_ribbon) {
+      VectorMatrix der;
+      bn.sextic.eval(bn.sextic.basisU().low(), 0, 1, der);
+      cpts[CPuv] = der[1][1] / 9 + cpts[CPu] + cpts[CPv] - cpts[CP];
+    }
+  }
+}
+
 void QuadFit::correctSecondDerivatives(BSSurface &quintic, size_t quad_index) const {
   static constexpr std::array<size_t, 8> vertex_cps = { 0, 5, 0, 30, 30, 35, 5, 35 };
   static constexpr std::array<size_t, 8> tangent_cps = { 1, 4, 6, 24, 31, 34, 11, 29 };
@@ -413,38 +446,27 @@ void QuadFit::correctTwists(BSSurface &quintic, size_t quad_index) const {
     const auto &b = quads[quad_index].boundaries[side];
     const auto &bn = quads[quad_index].boundaries[(side+1)%4];
 
-    // If there are 2 ribbons here, we don't need to compute the twist
-    if (b.on_ribbon && bn.on_ribbon)
+    // If it is near a ribbon, the twist is already computed
+    if (b.on_ribbon || bn.on_ribbon)
       continue;
 
+    // Otherwise use the surface curvature to tweak the CP height
     size_t CP = corner_cps[6*side], CPu = corner_cps[6*side+1], CPv = corner_cps[6*side+2],
       CPuu = corner_cps[6*side+3], CPvv = corner_cps[6*side+4], CPuv = corner_cps[6*side+5];
 
-    // If there is 1 fixed ribbon, take the twist from there
-    if (b.on_ribbon) {
-      VectorMatrix der;
-      b.sextic.eval(b.sextic.basisU().high(), 0, 1, der);
-      cpts[CPuv] = der[1][1] / 25 + cpts[CPu] + cpts[CPv] - cpts[CP];
-    } else if (bn.on_ribbon) {
-      VectorMatrix der;
-      bn.sextic.eval(bn.sextic.basisU().low(), 0, 1, der);
-      cpts[CPuv] = der[1][1] / 25 + cpts[CPu] + cpts[CPv] - cpts[CP];
-    } else {
-      // Otherwise use the surface curvature to tweak the CP height
-      auto Su = (cpts[CPu] - cpts[CP]) * 5 * (side == 1 || side == 2 ? -1 : 1);
-      auto Sv = (cpts[CPv] - cpts[CP]) * 5 * (side == 2 || side == 3 ? -1 : -1);
-      auto Suu = (cpts[CPuu] - cpts[CPu] * 2 + cpts[CP]) * 20;
-      auto Svv = (cpts[CPvv] - cpts[CPv] * 2 + cpts[CP]) * 20;
-      bool at_end = side == 1 || side == 2;
-      const auto &ends = endpoints[b.segment];
-      bool seg_end = b.reversed ? !at_end : at_end;
-      size_t v = seg_end ? ends.second : ends.first;
-      const auto &n = jet[v].normal;
-      double K = jet[v].k_max * jet[v].k_min;
-      double h = std::sqrt((Suu * n) * (Svv * n) - K * (Su ^ Sv).normSqr());
-      double sign = (side == 1 || side == 3) ? -1 : 1;
-      cpts[CPuv] += n * (n * (cpts[CP] - cpts[CPuv]) + h * sign / 25);
-    }
+    auto Su = (cpts[CPu] - cpts[CP]) * 5 * (side == 1 || side == 2 ? -1 : 1);
+    auto Sv = (cpts[CPv] - cpts[CP]) * 5 * (side == 2 || side == 3 ? -1 : -1);
+    auto Suu = (cpts[CPuu] - cpts[CPu] * 2 + cpts[CP]) * 20;
+    auto Svv = (cpts[CPvv] - cpts[CPv] * 2 + cpts[CP]) * 20;
+    bool at_end = side == 1 || side == 2;
+    const auto &ends = endpoints[b.segment];
+    bool seg_end = b.reversed ? !at_end : at_end;
+    size_t v = seg_end ? ends.second : ends.first;
+    const auto &n = jet[v].normal;
+    double K = jet[v].k_max * jet[v].k_min;
+    double h = std::sqrt((Suu * n) * (Svv * n) - K * (Su ^ Sv).normSqr());
+    double sign = (side == 1 || side == 3) ? -1 : 1;
+    cpts[CPuv] += n * (n * (cpts[CP] - cpts[CPuv]) + h * sign / 25);
   }
 }
 
@@ -595,7 +617,11 @@ std::vector<BSSurface> QuadFit::fit() {
   for (size_t i = 0; i < quads.size(); ++i)
     correctFirstDerivatives(result[i], i);
 
-  // 4. Compute better second derivatives for the quad boundary curves
+  // 4. Compute the correct twists for corner- and side vertices
+  for (size_t i = 0; i < quads.size(); ++i)
+    correctCubicTwists(result[i], i);
+
+  // 5. Compute better second derivatives for the quad boundary curves
 
   // First degree elevate to quintic, just for storing the second derivatives
   for (auto &s : result)
@@ -604,11 +630,11 @@ std::vector<BSSurface> QuadFit::fit() {
   for (size_t i = 0; i < quads.size(); ++i)
     correctSecondDerivatives(result[i], i);
 
-  // 5. Compute twist vectors
+  // 6. Compute twist vectors
   for (size_t i = 0; i < quads.size(); ++i)
     correctTwists(result[i], i);
 
-  // 6. Compute inner boundary ribbons
+  // 7. Compute inner boundary ribbons
   for (size_t i = 0; i < quads.size(); ++i) {
     for (size_t side = 0; side < 4; ++side) {
       auto &b = quads[i].boundaries[side];
@@ -618,7 +644,7 @@ std::vector<BSSurface> QuadFit::fit() {
     }
   }
 
-  // 7. Fill sextic patches
+  // 8. Fill sextic patches
   for (size_t i = 0; i < quads.size(); ++i) {
     auto &quad = quads[i];
     result[i] = elevateBezier(result[i], 6);
@@ -665,11 +691,11 @@ std::vector<BSSurface> QuadFit::fit() {
   }
 #endif
 
-  // 8a. Use a mask to compute the placement of the inner control points
+  // 9a. Use a mask to compute the placement of the inner control points
   // for (auto &r : result)
   //   applyMask(r, DiscreteMask::BIHARMONIC);
 
-  // 8. Fit sampled points using inner control points
+  // 9. Fit sampled points using inner control points
   // for (size_t i = 0; i < quads.size(); ++i) {
   //   auto ncp = result[i].numControlPoints();
   //   auto fix2 = [&](size_t i, size_t j) {

@@ -55,18 +55,21 @@ using the supplied sample points.
    (tangent control points are placed using the 1/3 rule). Twists are
    set up using the parallelogram rule.
 
-2. Local ribbons are created along the boundaries by multiplying the
+1. Local ribbons are created along the boundaries by multiplying the
    associated part of the ribbon with a scaling function. This scaling
    function is computed globally along the whole length of the ribbon,
    interpolating the given h-values at the junctions. The local
    ribbons are normalized to the [0,1] interval.
 
-3. Tangent control points of the cubic patches are updated. Tangents
+1. Tangent control points of the cubic patches are updated. Tangents
    at corner and side vertices are taken from the associated
    ribbons. Tangents at inner vertices are projected into the normal
    plane (from jet fitting).
 
-4. The cubic patches are degree elevated to quintic, and then the
+1. The twist control points of the cubic patches are updated to
+   reflect those of the corresponding ribbons, where applicable.
+
+1. The cubic patches are degree elevated to quintic, and then the
    second derivative control points are updated. At the ends of
    boundary segments these are not needed (we already know the local
    ribbons there, and the twists control points can also be directly
@@ -75,13 +78,11 @@ using the supplied sample points.
    projected onto a plane that has its height constrained by the
    principal curvatures.
    
-5. The twist control points are updated. At corner vertices we already
-   know both ribbons, so a twist is not needed. At side vertices we
-   take the twist from the associated ribbon; and at inner vertices we
-   project the twist control point onto a plane that has its height
+1. The twist control points at inner vertices are updated: we project
+   the twist control point onto a plane that has its height
    constrained by the principal curvatures.
 
-6. Compute the local ribbons at both outer and inner segments. First a
+1. Compute the local ribbons at both outer and inner segments. First a
    quartic, two-segment B-spline boundary curve is created from the
    already fixed boundary information (end CP, tangent CP, 2nd
    deriv. CP). Similarly, on both sides of the segment, a cubic,
@@ -96,10 +97,10 @@ using the supplied sample points.
    that interpolates the boundary, the cross-derivatives at the ends,
    and the twists.
    
-7. The quintic patches are degree-elevated to sextic. For each quad,
+1. The quintic patches are degree-elevated to sextic. For each quad,
    the knot vectors of opposite local ribbons are unified; all inner
    knots are also inserted into the sextic surface. Then the control
    points of the sextic ribbons are copied into the sextic patch.
    
-8. *(TODO: Here we should approximate the sampled points with the
+1. *(TODO: Here we should approximate the sampled points with the
    remaining free control points.)*

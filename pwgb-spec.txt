@@ -1,8 +1,12 @@
 PWGB File Format
 ----------------
 
-# The first line of the file is a description of its contents
-#   There should be no other comments in the file.
+# ASCII version:
+#   The first line of the file is a description of its contents
+#     There should be no other comments in the file.
+# Binary version: [not implemented yet]
+#   The first three bytes are (hexadecimal) 00 2F 00 (the last one shows the format version)
+#     All integers are signed 32 bit, all floats are 64 bit, everything little endian.
 
 # First part - ribbons
 #   Ribbons are described by two cubic B-spline curves

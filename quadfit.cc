@@ -108,7 +108,7 @@ void QuadFit::update() {
     endpoints.emplace_back(j0, j1);
   }
 
-  adjacency.resize(vertices.size());
+  adjacency.resize(segments.size());
   for (size_t i = 0; i < quads.size(); ++i)
     for (size_t j = 0; j < 4; ++j) {
       size_t s = quads[i].boundaries[j].segment;
@@ -538,21 +538,25 @@ static void fillSextic(BSSurface &s, const BSSurface &r0, const BSSurface &r1,
   double lo = knots_u[7] - knots_u[1], hi = knots_u.rbegin()[1] - knots_u.rbegin()[7];
   for (size_t j = 0; j < n_cpts[1]; ++j) {
     s.controlPoint(0, j) = r0.controlPoint(j, 0);
-    s.controlPoint(1, j) =
-      r0.controlPoint(j, 0) + (r0.controlPoint(j, 1) - r0.controlPoint(j, 0)) / 6 * lo;
     s.controlPoint(n_cpts[0] - 1, j) = r2.controlPoint(j, 0);
-    s.controlPoint(n_cpts[0] - 2, j) =
-      r2.controlPoint(j, 0) + (r2.controlPoint(j, 1) - r2.controlPoint(j, 0)) / 6 * hi;
+    if (j != 0 && j != n_cpts[1] - 1) {
+      s.controlPoint(1, j) =
+        r0.controlPoint(j, 0) + (r0.controlPoint(j, 1) - r0.controlPoint(j, 0)) / 6 * lo;
+      s.controlPoint(n_cpts[0] - 2, j) =
+        r2.controlPoint(j, 0) + (r2.controlPoint(j, 1) - r2.controlPoint(j, 0)) / 6 * hi;
+    }
   }
   const auto &knots_v = s.basisV().knots();
   lo = knots_v[7] - knots_v[1]; hi = knots_v.rbegin()[1] - knots_v.rbegin()[7];
   for (size_t j = 0; j < n_cpts[0]; ++j) {
     s.controlPoint(j, 0) = r1.controlPoint(j, 0);
-    s.controlPoint(j, 1) =
-      r1.controlPoint(j, 0) + (r1.controlPoint(j, 1) - r1.controlPoint(j, 0)) / 6 * lo;
     s.controlPoint(j, n_cpts[1] - 1) = r3.controlPoint(j, 0);
-    s.controlPoint(j, n_cpts[1] - 2) =
-      r3.controlPoint(j, 0) + (r3.controlPoint(j, 1) - r3.controlPoint(j, 0)) / 6 * hi;
+    if (j != 0 && j != n_cpts[0] - 1) {
+      s.controlPoint(j, 1) =
+        r1.controlPoint(j, 0) + (r1.controlPoint(j, 1) - r1.controlPoint(j, 0)) / 6 * lo;
+      s.controlPoint(j, n_cpts[1] - 2) =
+        r3.controlPoint(j, 0) + (r3.controlPoint(j, 1) - r3.controlPoint(j, 0)) / 6 * hi;
+    }
   }
 }
 
@@ -611,8 +615,6 @@ std::vector<BSSurface> QuadFit::fit() {
       if (b.on_ribbon)
         continue;
       b.sextic = innerBoundaryRibbon(result, i, side);
-      // writeSTL({b.sextic}, std::string("/tmp/sextic") + std::to_string(i) +
-      //          "_" + std::to_string(side) + ".stl", 50);
     }
   }
 
@@ -628,35 +630,38 @@ std::vector<BSSurface> QuadFit::fit() {
 
 #define PRINT_G1_ERRORS
 #ifdef PRINT_G1_ERRORS
-  std::cout << "Maximal G1 errors:" << std::endl;
+  std::cout << "Maximal errors:\tC0\tG1 (degrees)" << std::endl;
   for (const auto &adj : adjacency) {
     if (adj.size() < 2)
       continue;
-    std::cout << "Quad #" << adj[0].first + 1 << " - #" << adj[1].first + 1 << ": ";
+    std::cout << "Quads #" << adj[0].first + 1 << " - #" << adj[1].first + 1 << ":\t";
     const auto &q1 = result[adj[0].first];
     const auto &q2 = result[adj[1].first];
     size_t side1 = adj[0].second, side2 = adj[1].second;
     bool reversed = quads[adj[0].first].boundaries[side1].reversed !=
       quads[adj[1].first].boundaries[side2].reversed;
-    double max_error = 0;
+    double max_p_error = 0, max_t_error = 0;
     size_t resolution = 100;
-    auto evalNormal = [&](const BSSurface &s, size_t side, double u) {
-      VectorMatrix der;
-      if (side == 0 || side == 2) // v-side
-        s.eval(side == 0 ? 0 : 1, u, 1, der);
-      else // u-side
-        s.eval(u, side == 1 ? 0 : 1, 1, der);
-      return (der[1][0] ^ der[0][1]).normalize();
-    };
+    auto evalNormal = [&](const BSSurface &s, size_t side, double u) ->
+      std::pair<Point3D, Vector3D>
+      {
+        VectorMatrix der;
+        if (side == 0 || side == 2) // v-side
+          s.eval(side == 0 ? 0 : 1, u, 1, der);
+        else // u-side
+          s.eval(u, side == 1 ? 0 : 1, 1, der);
+        return { der[0][0], (der[1][0] ^ der[0][1]).normalize() };
+      };
     for (size_t i = 0; i <= resolution; ++i) {
       double u = (double)i / resolution;
-      auto n1 = evalNormal(q1, side1, u);
-      auto n2 = evalNormal(q2, side2, reversed ? 1 - u : u);
-      double err = std::acos(std::min(std::max(n1 * n2, -1.0), 1.0)) * 180 / M_PI;
-      if (err > max_error)
-        max_error = err;
+      auto [p1, n1] = evalNormal(q1, side1, u);
+      auto [p2, n2] = evalNormal(q2, side2, reversed ? 1 - u : u);
+      double p_error = (p1 - p2).norm();
+      double t_error = std::acos(std::min(std::max(n1 * n2, -1.0), 1.0)) * 180 / M_PI;
+      max_p_error = std::max(max_p_error, p_error);
+      max_t_error = std::max(max_t_error, t_error);
     }
-    std::cout << max_error << " degrees" << std::endl;
+    std::cout << max_p_error << " \t" << max_t_error << std::endl;
   }
 #endif
 

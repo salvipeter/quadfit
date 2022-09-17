@@ -181,7 +181,7 @@ BSSurface multiplyBSplines(const BSBasis &basis1, const BSBasis &basis2,
   size_t d = basis.degree();
   const auto &knots = basis.knots();
 
-#ifdef INTERPOLATION_METHOD
+#if 0
   auto pv1 = inBasis(basis, point);
   auto pv2 = inBasis(basis, derivative);
   size_t n_cp = pv1.size();

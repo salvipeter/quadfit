@@ -400,15 +400,17 @@ void QuadFit::correctCubicTwists(BSSurface &cubic, size_t quad_index) const {
     // If there is a fixed ribbon, take the twist from there
     // (assuming that 2 fixed ribbons share a common twist);
     // otherwise we will need the 2nd derivatives, see correctTwists()
-    if (b.on_ribbon) {
+    auto fixByRibbon = [&](const Quad::Boundary &b, bool at_end) {
+      double u = at_end ? b.sextic.basisU().high() : b.sextic.basisU().low();
       VectorMatrix der;
-      b.sextic.eval(b.sextic.basisU().high(), 0, 1, der);
-      cpts[CPuv] = der[1][1] / 9 + cpts[CPu] + cpts[CPv] - cpts[CP];
-    } else if (bn.on_ribbon) {
-      VectorMatrix der;
-      bn.sextic.eval(bn.sextic.basisU().low(), 0, 1, der);
-      cpts[CPuv] = der[1][1] / 9 + cpts[CPu] + cpts[CPv] - cpts[CP];
-    } else
+      b.sextic.eval(u, 0, 2, der);
+      cpts[CPuv] = der[1][1] * (at_end ? -1 : 1) / 9 + cpts[CPu] + cpts[CPv] - cpts[CP];
+    };
+    if (b.on_ribbon)
+      fixByRibbon(b, side == 1 || side == 2);
+    else if (bn.on_ribbon)
+      fixByRibbon(bn, side == 2 || side == 3);
+    else
       not_fixed.push_back(CPuv);
   }
 
@@ -417,6 +419,7 @@ void QuadFit::correctCubicTwists(BSSurface &cubic, size_t quad_index) const {
   if (not_fixed.size() == 1) {
     size_t i = not_fixed[0];
     cpts[i] = (cpts[i-1] + cpts[i+1] + cpts[i-4] + cpts[i+4]) / 4;
+    // cpts[i] = intersectLines(cpts[i-1], cpts[i+1] - cpts[i-1], cpts[i-4], cpts[i+4] - cpts[i-4]);
   } else {
     size_t i = not_fixed[0], j = not_fixed[1];
     if (i > j)
@@ -688,8 +691,7 @@ std::vector<BSSurface> QuadFit::fit() {
                quad.boundaries[2].sextic, quad.boundaries[3].sextic);
   }
 
-#define PRINT_G1_ERRORS
-#ifdef PRINT_G1_ERRORS
+#if 1
   std::cout << "Maximal errors:\tC0\tG1 (degrees)" << std::endl;
   for (const auto &adj : adjacency) {
     if (adj.size() < 2)

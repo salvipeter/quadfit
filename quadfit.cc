@@ -93,35 +93,6 @@ std::string QuadFit::readPWGB(std::string filename) {
   return description;
 }
 
-void QuadFit::update() {
-  auto vertexIndex = [&](const Point3D &p) {
-    for (size_t i = 0; i < vertices.size(); ++i)
-      if ((p - vertices[i]).norm() < epsilon)
-        return i;
-    vertices.push_back(p);
-    return vertices.size() - 1;
-  };
-
-  for (size_t i = 0; i < segments.size(); ++i) {
-    size_t j0 = vertexIndex(segments[i].controlPoints().front());
-    size_t j1 = vertexIndex(segments[i].controlPoints().back());
-    endpoints.emplace_back(j0, j1);
-  }
-
-  adjacency.resize(segments.size());
-  for (size_t i = 0; i < quads.size(); ++i)
-    for (size_t j = 0; j < 4; ++j) {
-      size_t s = quads[i].boundaries[j].segment;
-      adjacency[s].emplace_back(i, j);
-    }
-
-  PointVector all_points;
-  for (const auto &q : quads)
-    all_points.insert(all_points.end(), q.samples.begin(), q.samples.end());
-  jet = JetWrapper::fit(vertices, JetWrapper::Nearest(all_points));
-  // writeVertexCurvatures(vertices, jet, "/tmp/curvatures.vtk");
-}
-
 [[maybe_unused]]
 static void writeVertexCurvatures(const std::vector<Point3D> &vertices,
                                   const std::vector<JetData> &jet,
@@ -159,6 +130,35 @@ static void writeVertexCurvatures(const std::vector<Point3D> &vertices,
   for (const auto &jd : jet) {
     f << jd.d_max << std::endl;
   }
+}
+
+void QuadFit::update() {
+  auto vertexIndex = [&](const Point3D &p) {
+    for (size_t i = 0; i < vertices.size(); ++i)
+      if ((p - vertices[i]).norm() < epsilon)
+        return i;
+    vertices.push_back(p);
+    return vertices.size() - 1;
+  };
+
+  for (size_t i = 0; i < segments.size(); ++i) {
+    size_t j0 = vertexIndex(segments[i].controlPoints().front());
+    size_t j1 = vertexIndex(segments[i].controlPoints().back());
+    endpoints.emplace_back(j0, j1);
+  }
+
+  adjacency.resize(segments.size());
+  for (size_t i = 0; i < quads.size(); ++i)
+    for (size_t j = 0; j < 4; ++j) {
+      size_t s = quads[i].boundaries[j].segment;
+      adjacency[s].emplace_back(i, j);
+    }
+
+  PointVector all_points;
+  for (const auto &q : quads)
+    all_points.insert(all_points.end(), q.samples.begin(), q.samples.end());
+  jet = JetWrapper::fit(vertices, JetWrapper::Nearest(all_points));
+  // writeVertexCurvatures(vertices, jet, "/tmp/curvatures.vtk");
 }
 
 // Fit cubic Bezier surfaces
@@ -452,7 +452,7 @@ void QuadFit::correctSecondDerivatives(BSSurface &quintic, size_t quad_index) co
       bool seg_end = b.reversed ? !at_end : at_end;
       size_t v = seg_end ? ends.second : ends.first;
       const auto &n = jet[v].normal;
-      auto der = (cpts[tangent_cps[j]] - cpts[vertex_cps[j]]) * 5 * (at_end ? -1 : 1);
+      auto der = (cpts[tangent_cps[j]] - cpts[vertex_cps[j]]) * 5;
       size_t index = vertex_cps[j] + ((int)tangent_cps[j] - (int)vertex_cps[j]) * 2;
       double cos_theta = jet[v].d_max * der.normalized();
       double c2 = cos_theta * cos_theta, s2 = 1 - c2;
@@ -470,13 +470,9 @@ void QuadFit::correctSecondDerivatives(BSSurface &quintic, size_t quad_index) co
 
 // At the corner between side `side` and `side+1`
 void QuadFit::correctTwists(BSSurface &quintic, size_t quad_index) const {
-  static constexpr std::array<size_t, 24> corner_cps = // S, Su, Sv, Suu, Svv, Suv
-    {
-       0,  6,  1, 12,  2,  7, // u = 0, v = 0
-      30, 24, 31, 18, 32, 25, // u = 1, v = 0
-      35, 29, 34, 23, 33, 28, // u = 1, v = 1
-       5, 11,  4, 17,  3, 10  // u = 0, v = 1
-    };
+  static constexpr std::array<size_t, 24> corner_cps = // S, Suv
+    { 0, 7, 30, 25, 35, 28, 5, 10 };
+  static constexpr std::array<double, 8> uv = { 0,0, 1,0, 1,1, 0,1 };
   auto &cpts = quintic.controlPoints();
 
   for (size_t side = 0; side < 4; ++side) {
@@ -488,13 +484,13 @@ void QuadFit::correctTwists(BSSurface &quintic, size_t quad_index) const {
       continue;
 
     // Otherwise use the surface curvature to tweak the CP height
-    size_t CP = corner_cps[6*side], CPu = corner_cps[6*side+1], CPv = corner_cps[6*side+2],
-      CPuu = corner_cps[6*side+3], CPvv = corner_cps[6*side+4], CPuv = corner_cps[6*side+5];
-
-    auto Su = (cpts[CPu] - cpts[CP]) * 5 * (side == 1 || side == 2 ? -1 : 1);
-    auto Sv = (cpts[CPv] - cpts[CP]) * 5 * (side == 2 || side == 3 ? -1 : -1);
-    auto Suu = (cpts[CPuu] - cpts[CPu] * 2 + cpts[CP]) * 20;
-    auto Svv = (cpts[CPvv] - cpts[CPv] * 2 + cpts[CP]) * 20;
+    size_t CP = corner_cps[2*side], CPuv = corner_cps[2*side+1];
+    VectorMatrix der;
+    quintic.eval(uv[2*side], uv[2*side+1], 2, der);
+    const auto &Su = der[1][0];
+    const auto &Sv = der[0][1];
+    const auto &Suu = der[2][0];
+    const auto &Svv = der[0][2];
     bool at_end = side == 1 || side == 2;
     const auto &ends = endpoints[b.segment];
     bool seg_end = b.reversed ? !at_end : at_end;
@@ -503,6 +499,14 @@ void QuadFit::correctTwists(BSSurface &quintic, size_t quad_index) const {
     double K = jet[v].k_max * jet[v].k_min;
     double h = std::sqrt((Suu * n) * (Svv * n) - K * (Su ^ Sv).normSqr());
     double sign = (side == 1 || side == 3) ? -1 : 1;
+    {
+      auto E = Su.normSqr(), F = Su * Sv, G = Sv.normSqr();
+      auto L = Suu * n, M = h, N = Svv * n;
+      auto H = jet[v].k_min + jet[v].k_max;
+      auto H1 = (L * G - 2 * M * F + N * E) / (E * G - F * F);
+      if (std::abs(H - H1) > epsilon) // dirty hack
+        sign *= -1;
+    }
     cpts[CPuv] += n * (n * (cpts[CP] - cpts[CPuv]) + h * sign / 25);
   }
 }
@@ -533,7 +537,7 @@ BSSurface QuadFit::innerBoundaryRibbon(const std::vector<BSSurface> &quintic_pat
   const auto &adj = adjacency[b.segment];
   const auto &opp = adj[0].first == i ? adj[1] : adj[0];
   const auto &b_opp = quads[opp.first].boundaries[opp.second];
-      
+
   auto der1_0 = extractDerivatives(result[i], side, false);
   auto der1_1 = extractDerivatives(result[i], side, true);
   auto der2_0 = extractDerivatives(result[opp.first], opp.second, false);
@@ -692,7 +696,7 @@ std::vector<BSSurface> QuadFit::fit() {
   }
 
 #if 1
-  std::cout << "Maximal errors:\tC0\tG1 (degrees)" << std::endl;
+  std::cout << "\nMaximal errors:\tC0\tG1 (degrees)" << std::endl;
   for (const auto &adj : adjacency) {
     if (adj.size() < 2)
       continue;
@@ -725,6 +729,7 @@ std::vector<BSSurface> QuadFit::fit() {
     }
     std::cout << max_p_error << " \t" << max_t_error << std::endl;
   }
+  std::cout << std::endl;
 #endif
 
   // 9a. Use a mask to compute the placement of the inner control points

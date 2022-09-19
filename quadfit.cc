@@ -470,8 +470,7 @@ void QuadFit::correctSecondDerivatives(BSSurface &quintic, size_t quad_index) co
 
 // At the corner between side `side` and `side+1`
 void QuadFit::correctTwists(BSSurface &quintic, size_t quad_index) const {
-  static constexpr std::array<size_t, 24> corner_cps = // S, Suv
-    { 0, 7, 30, 25, 35, 28, 5, 10 };
+  static constexpr std::array<size_t, 8> corner_cps = { 0, 7, 30, 25, 35, 28, 5, 10 };
   static constexpr std::array<double, 8> uv = { 0,0, 1,0, 1,1, 0,1 };
   auto &cpts = quintic.controlPoints();
 
@@ -695,7 +694,7 @@ std::vector<BSSurface> QuadFit::fit() {
                quad.boundaries[2].sextic, quad.boundaries[3].sextic);
   }
 
-#if 1
+#ifdef DEBUG
   std::cout << "\nMaximal errors:\tC0\tG1 (degrees)" << std::endl;
   for (const auto &adj : adjacency) {
     if (adj.size() < 2)
@@ -730,7 +729,7 @@ std::vector<BSSurface> QuadFit::fit() {
     std::cout << max_p_error << " \t" << max_t_error << std::endl;
   }
   std::cout << std::endl;
-#endif
+#endif // DEBUG
 
   // 9a. Use a mask to compute the placement of the inner control points
   // for (auto &r : result)

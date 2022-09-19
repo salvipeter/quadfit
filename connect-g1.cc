@@ -61,6 +61,18 @@ BSSurface connectG1(const BSCurve &c, const BSCurve &c1, const BSCurve &c2) {
   BSCurve scaling(3, { lo, lo, lo, lo, hi, hi, hi, hi },
                   { ab_0, ab_0 + ab_0d * (hi - lo) / 3, ab_1 - ab_1d * (hi - lo) / 3, ab_1 });
 
+#ifdef DEBUG
+  double er1 = (S1v_0 - D0 * ab_0[0] - Su_0 * ab_0[1]).norm();
+  double er2 = (S1v_1 - D1 * ab_1[0] - Su_1 * ab_1[1]).norm();
+  if (std::max(er1, er2) > epsilon)
+    std::cout << "Representation error (type 1): " << er1 << ", " << er2 << std::endl;
+
+  double err1 = (S1uv_0 - (S1uv_0 - S2uv_0) / 2 * ab_0[0] - Suu_0 * ab_0[1] - D0 * ab_0d[0] - Su_0 * ab_0d[1]).norm();
+  double err2 = (S1uv_1 - (S1uv_1 - S2uv_1) / 2 * ab_1[0] - Suu_1 * ab_1[1] - D1 * ab_1d[0] - Su_1 * ab_1d[1]).norm();
+  if (std::max(err1, err2) > epsilon)
+    std::cout << "Representation error (type 2): " << err1 << ", " << err2 << std::endl;
+#endif // DEBUG
+
   // Indirect solution using integration or interpolation
   // ---
   auto point = [&](double u) {

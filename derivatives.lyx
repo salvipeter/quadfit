@@ -190,8 +190,24 @@ where
 \begin_inset Formula $\kappa_{v}$
 \end_inset
 
- are the normal curvatures of the corresponding curves.
+ are the normal curvatures in the 
+\begin_inset Formula $u$
+\end_inset
+
+ and 
+\begin_inset Formula $v$
+\end_inset
+
+ directions.
  We also know that
+\begin_inset Formula 
+\begin{align}
+L & =\kappa_{u}E, & N & =\kappa_{v}G,
+\end{align}
+
+\end_inset
+
+or, equivalently,
 \begin_inset Formula 
 \begin{align}
 S_{uu}n & =\kappa_{u}\|S_{u}\|^{2}, & S_{vv}n & =\kappa_{v}\|S_{v}\|^{2},
@@ -203,7 +219,15 @@ which constrains the ``height'' of the second derivatives.
  Similarly, from
 \begin_inset Formula 
 \begin{equation}
-S_{uv}n=\sqrt{(S_{uu}n)(S_{vv}n)-\kappa_{\max}\kappa_{\min}\|S_{u}\times S_{v}\|^{2}},
+M^{2}=LN-K(EG-F^{2}),
+\end{equation}
+
+\end_inset
+
+or, equivalently,
+\begin_inset Formula 
+\begin{equation}
+S_{uv}n=\pm\sqrt{(S_{uu}n)(S_{vv}n)-\kappa_{\max}\kappa_{\min}\|S_{u}\times S_{v}\|^{2}},
 \end{equation}
 
 \end_inset
@@ -234,7 +258,8 @@ First express both vectors in their common plane, so
 
 \end_inset
 
-
+But note that we do not really need oriented angles, as all (co)sines are
+ squared.
 \end_layout
 
 \end_body

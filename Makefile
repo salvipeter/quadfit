@@ -5,7 +5,13 @@ LIBGEOM=../libgeom
 JETWRAP=../jet-wrapper
 EXTRACT=../bezier-extractions
 
-CXXFLAGS=-fsanitize=address -Wall -pedantic -std=c++17 -O0 -g \
+# Release
+# CXXFLAGS=-Wall -pedantic -std=c++17 -O3 -DNDEBUG \
+# 		 -I$(LIBGEOM) -I$(JETWRAP) -I$(EXTRACT) -I$(EIGEN)
+# LDFLAGS=-L. -L$(LIBGEOM)/release -lgeom -lomp
+
+# Debug
+CXXFLAGS=-fsanitize=address -Wall -pedantic -std=c++17 -O0 -g -DDEBUG \
 		 -I$(LIBGEOM) -I$(JETWRAP) -I$(EXTRACT) -I$(EIGEN)
 LDFLAGS=-lasan -L. -L$(LIBGEOM)/debug -lgeom -lomp
 
@@ -22,3 +28,7 @@ ribbon-test: ribbon-test.o fit-ribbon.o multiply.o io.o $(EXTRACT)/bezier-extrac
 
 connect-test: connect-test.o connect-g1.o multiply.o io.o $(EXTRACT)/bezier-extractions.o
 	$(CXX) -o $@ $^ $(LDFLAGS)
+
+.PHONY: clean
+clean:
+	$(RM) *.o libquadfit.a quadfit-test ribbon-test connect-test

@@ -811,8 +811,8 @@ std::vector<BSSurface> QuadFit::fit() {
         max_t = i;
       }
     }
-    std::cout << "Quad #" << adj[0].first << " side " << side
-              << " (" << max_p << " / " << max_t << ")\t"
+    std::cout << "Quads #" << adj[0].first << " - #" << adj[1].first
+              << " (" << max_p << " / " << max_t << "):\t"
               << max_err << "\t" << max_t_err << std::endl;
   }
   std::cout << std::endl;

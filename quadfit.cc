@@ -622,6 +622,46 @@ static void fillSextic(BSSurface &s, const BSSurface &r0, const BSSurface &r1,
   }
 }
 
+[[maybe_unused]]
+static Point3D closestPoint(const BSCurve &curve, const Point3D &point, double &u,
+                            size_t max_iteration, double distance_tol, double cosine_tol) {
+  VectorVector der;
+  auto lo = curve.basis().low();
+  auto hi = curve.basis().high();
+
+  for (size_t iteration = 0; iteration < max_iteration; ++iteration) {
+    auto deviation = curve.eval(u, 2, der) - point;
+    auto distance = deviation.norm();
+    if (distance < distance_tol)
+      break;
+
+    double scaled_error = der[1] * deviation;
+    double cosine_err = std::abs(scaled_error) / (der[1].norm() * distance);
+    if (cosine_err < cosine_tol)
+      break;
+    
+    double old = u;
+    u -= scaled_error / (der[2] * deviation + der[1] * der[1]);
+    u = std::min(std::max(u, lo), hi);
+
+    if ((der[1] * (u - old)).norm() < distance_tol)
+      break;
+  }
+
+  return der[0];
+}
+
+// Returns the v = 0 isocurve
+[[maybe_unused]]
+static BSCurve baseCurve(const BSSurface &ribbon) {
+  size_t n = ribbon.numControlPoints()[0];
+  PointVector cpts;
+  cpts.resize(n);
+  for (size_t i = 0; i < n; ++i)
+    cpts[i] = ribbon.controlPoint(i, 0);
+  return { ribbon.basisU().degree(), ribbon.basisU().knots(), cpts };
+}
+
 std::vector<BSSurface> QuadFit::fit() {
   // 1. Simple C0 fit
   auto result = initialFit();
@@ -727,6 +767,29 @@ std::vector<BSSurface> QuadFit::fit() {
       max_t_error = std::max(max_t_error, t_error);
     }
     std::cout << max_p_error << " \t" << max_t_error << std::endl;
+  }
+  std::cout << std::endl;
+
+  std::cout << "Deviation from the original curves:" << std::endl;
+  for (const auto &adj : adjacency) {
+    if (adj.size() < 2)
+      continue;
+    size_t side = adj[0].second;
+    const auto &q = quads[adj[0].first];
+    const auto &b = q.boundaries[side];
+    auto res = q.resolution;
+    size_t index = res / 2;
+    auto u = (double)index / res;
+    if (side == 2)
+      index = index * (res + 1);
+    else if (side == 3)
+      index = res * (res + 1) + index;
+    else if (side == 0)
+      index = index * (res + 1) + res;
+    const auto &p1 = q.samples[index];
+    auto p2 = closestPoint(baseCurve(b.sextic), p1, u, 20, 0, 0);
+    auto err = (p1 - p2).norm();
+    std::cout << err << " @ " << p2 << std::endl;
   }
   std::cout << std::endl;
 #endif // DEBUG

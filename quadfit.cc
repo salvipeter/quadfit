@@ -770,7 +770,7 @@ std::vector<BSSurface> QuadFit::fit() {
   }
   std::cout << std::endl;
 
-  std::cout << "Deviation from the original curves:" << std::endl;
+  std::cout << "Curve maximal deviation:\tC0\tG1 (degrees)" << std::endl;
   for (const auto &adj : adjacency) {
     if (adj.size() < 2)
       continue;
@@ -778,18 +778,42 @@ std::vector<BSSurface> QuadFit::fit() {
     const auto &q = quads[adj[0].first];
     const auto &b = q.boundaries[side];
     auto res = q.resolution;
-    size_t index = res / 2;
-    auto u = (double)index / res;
-    if (side == 2)
-      index = index * (res + 1);
-    else if (side == 3)
-      index = res * (res + 1) + index;
-    else if (side == 0)
-      index = index * (res + 1) + res;
-    const auto &p1 = q.samples[index];
-    auto p2 = closestPoint(baseCurve(b.sextic), p1, u, 20, 0, 0);
-    auto err = (p1 - p2).norm();
-    std::cout << err << " @ " << p2 << std::endl;
+    double max_err = 0, max_t_err = 0;
+    size_t max_p, max_t;
+    for (size_t i = 0; i <= res; ++i) {
+      size_t index = i, index2 = index + res + 1;
+      auto u = (double)index / res;
+      if (side == 2) {
+        index = index * (res + 1);
+        index2 = index + 1;
+      } else if (side == 3) {
+        index = res * (res + 1) + index;
+        index2 = index - (res + 1);
+      }
+      else if (side == 0) {
+        index = index * (res + 1) + res;
+        index2 = index - 1;
+      }
+      const auto &p1 = q.samples[index];
+      auto p2 = closestPoint(baseCurve(b.sextic), p1, u, 20, 0, 0);
+      VectorMatrix der;
+      b.sextic.eval(u, 0, 1, der);
+      auto n1 = (der[1][0] ^ (q.samples[index2] - p1)).normalize();
+      auto n2 = (der[1][0] ^ der[0][1]).normalize();
+      auto err = (p1 - p2).norm();
+      auto t_err = std::acos(std::min(std::abs(n1 * n2), 1.0)) * 180 / M_PI;
+      if (err > max_err) {
+        max_err = err;
+        max_p = i;
+      }
+      if (t_err > max_t_err) {
+        max_t_err = t_err;
+        max_t = i;
+      }
+    }
+    std::cout << "Quad #" << adj[0].first << " side " << side
+              << " (" << max_p << " / " << max_t << ")\t"
+              << max_err << "\t" << max_t_err << std::endl;
   }
   std::cout << std::endl;
 #endif // DEBUG

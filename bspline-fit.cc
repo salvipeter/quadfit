@@ -9,17 +9,19 @@ using namespace Geometry;
 using IndexPair = std::pair<size_t, size_t>;
 using VecMap = Eigen::Map<const Eigen::Vector3d>;
 
-void bsplineFit(BSCurve &curve, size_t resolution, const PointVector &samples,
-                const std::function<bool(size_t)> &isFixed, double smoothness) {
+void bsplineFit(BSCurve &curve, const PointVector &samples,
+                const std::function<MoveConstraint(size_t)> &constraint,
+                double smoothness) {
   const auto &basis = curve.basis();
   size_t p = basis.degree();
   auto &cpts = curve.controlPoints();
   auto n = cpts.size();
+  size_t resolution = samples.size();
 
   std::map<size_t, size_t> index_map;
   size_t index = 0;
   for (size_t i = 0; i < n; ++i)
-    if (!isFixed(i)) {
+    if (std::holds_alternative<MoveType::Free>(constraint(i))) {
       index_map[i] = index;
       index++;
     }
@@ -32,7 +34,7 @@ void bsplineFit(BSCurve &curve, size_t resolution, const PointVector &samples,
   A.setZero(); b.setZero();
 
   auto addValue = [&](size_t row, size_t i, double x) {
-    if (isFixed(i))
+    if (std::holds_alternative<MoveType::Fixed>(constraint(i)))
       b.row(row) -= VecMap(cpts[i].data()) * x;
     else
       A(row, index_map.at(i)) = x;
@@ -63,14 +65,15 @@ void bsplineFit(BSCurve &curve, size_t resolution, const PointVector &samples,
   Eigen::MatrixXd x = A.colPivHouseholderQr().solve(b);
 
   for (size_t i = 0; i < n; ++i)
-    if (!isFixed(i)) {
+    if (std::holds_alternative<MoveType::Free>(constraint(i))) {
       size_t k = index_map.at(i);
       cpts[i] = Point3D(x(k, 0), x(k, 1), x(k, 2));
     }
 }
 
 void bsplineFit(BSSurface &surface, size_t resolution, const PointVector &samples,
-                const std::function<bool(size_t,size_t)> &isFixed, double smoothness) {
+                const std::function<MoveConstraint(size_t,size_t)> &constraint,
+                double smoothness) {
   size_t pu = surface.basisU().degree(), pv = surface.basisV().degree();
   auto [nu, nv] = surface.numControlPoints();
   auto &cpts = surface.controlPoints();
@@ -79,7 +82,7 @@ void bsplineFit(BSSurface &surface, size_t resolution, const PointVector &sample
   size_t index = 0;
   for (size_t i = 0; i < nu; ++i)
     for (size_t j = 0; j < nv; ++j)
-      if (!isFixed(i, j)) {
+      if (std::holds_alternative<MoveType::Free>(constraint(i, j))) {
         index_map[{i,j}] = index;
         index++;
       }
@@ -92,19 +95,18 @@ void bsplineFit(BSSurface &surface, size_t resolution, const PointVector &sample
   A.setZero(); b.setZero();
 
   auto addValue = [&](size_t row, size_t i, size_t j, double x) {
-    if (isFixed(i, j))
+    if (std::holds_alternative<MoveType::Fixed>(constraint(i, j)))
       b.row(row) -= VecMap(cpts[i*nv+j].data()) * x;
     else
       A(row, index_map.at({i,j})) = x;
   };
 
-  index = 0;
-  for (size_t i = 0; i <= resolution; ++i) {
+  for (size_t i = 0, index = 0; i <= resolution; ++i) {
     double u = (double)i / resolution;
     size_t span_u = surface.basisU().findSpan(u);
     DoubleVector coeff_u;
     surface.basisU().basisFunctions(span_u, u, coeff_u);
-    for (size_t j = 0; j <= resolution; ++j) {
+    for (size_t j = 0; j <= resolution; ++j, ++index) {
       double v = (double)j / resolution;
       size_t span_v = surface.basisV().findSpan(v);
       DoubleVector coeff_v;
@@ -116,8 +118,6 @@ void bsplineFit(BSSurface &surface, size_t resolution, const PointVector &sample
           size_t i1 = span_u - pu + k, j1 = span_v - pv + l;
           addValue(index, i1, j1, coeff_u[k] * coeff_v[l]);
         }
-
-      index++;
     }
   }
 
@@ -137,7 +137,7 @@ void bsplineFit(BSSurface &surface, size_t resolution, const PointVector &sample
   index = 0;
   for (size_t i = 0; i < nu; ++i)
     for (size_t j = 0; j < nv; ++j) {
-      if (!isFixed(i, j)) {
+      if (std::holds_alternative<MoveType::Free>(constraint(i, j))) {
         size_t k = index_map.at({i,j});
         cpts[index] = Point3D(x(k, 0), x(k, 1), x(k, 2));
       }

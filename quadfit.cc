@@ -783,14 +783,14 @@ std::vector<BSSurface> QuadFit::fit() {
     for (size_t i = 0; i <= res; ++i) {
       size_t index = i, index2 = index + res + 1;
       auto u = (double)index / res;
-      if (side == 2) {
+      if (side == 1) {
         index = index * (res + 1);
         index2 = index + 1;
-      } else if (side == 3) {
+      } else if (side == 2) {
         index = res * (res + 1) + index;
         index2 = index - (res + 1);
       }
-      else if (side == 0) {
+      else if (side == 3) {
         index = index * (res + 1) + res;
         index2 = index - 1;
       }
@@ -819,8 +819,8 @@ std::vector<BSSurface> QuadFit::fit() {
 #endif // DEBUG
 
   // 9a. Use a mask to compute the placement of the inner control points
-  // for (auto &r : result)
-  //   applyMask(r, DiscreteMask::BIHARMONIC);
+  for (auto &r : result)
+    applyMask(r, DiscreteMask::C1_COONS);
 
   // 9. Fit sampled points using inner control points
   // for (size_t i = 0; i < quads.size(); ++i) {

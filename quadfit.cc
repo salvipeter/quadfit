@@ -528,6 +528,28 @@ static VectorVector extractDerivatives(const BSSurface &surface, size_t side, bo
            der[0][1] * v_sign, der[1][1] * u_sign * v_sign };
 }
 
+static auto crossSamples(const PointVector &samples, size_t side, size_t res) {
+  std::vector<std::pair<Vector3D, Vector3D>> result;
+  for (size_t i = 0; i <= res; ++i) {
+    size_t index = i, index2 = index + res + 1;
+    if (side == 1) {
+      index = index * (res + 1);
+      index2 = index + 1;
+    } else if (side == 2) {
+      index = res * (res + 1) + index;
+      index2 = index - (res + 1);
+    }
+    else if (side == 3) {
+      index = index * (res + 1) + res;
+      index2 = index - 1;
+    }
+    const auto &p1 = samples[index];
+    const auto &p2 = samples[index2];
+    result.emplace_back(p1, p2);
+  }
+  return result;
+}
+
 BSSurface QuadFit::innerBoundaryRibbon(const std::vector<BSSurface> &quintic_patches,
                                        size_t quad_index, size_t side) const {
   const auto &result = quintic_patches;
@@ -548,30 +570,32 @@ BSSurface QuadFit::innerBoundaryRibbon(const std::vector<BSSurface> &quintic_pat
                der1_1[0] + der1_1[1] * 3 / 8 + der1_1[2] / 24,
                der1_1[0] + der1_1[1] / 8,
                der1_1[0] });
-
-  // Better curve approximation
   // c = c.insertKnot(0.25, 1);
   // c = c.insertKnot(0.75, 1);
-  PointVector points;
-  size_t start = 0, step = 1, res = quads[quad_index].resolution;
-  if (side == 3)
-    start = res;
-  if (side == 2)
-    start = res * (res + 1);
-  if (side == 1 || side == 3)
-    step = res + 1;
-  for (size_t i = 0; i <= res; ++i)
-    points.push_back(quads[quad_index].samples[start+step*i]);
-  auto constraint = [=](size_t i) -> MoveConstraint {
-    if (i == 2)
-      return MoveType::Tangent({(der1_0[1] ^ der1_0[3]).normalize()});
-    if (i > 2 && i < c.controlPoints().size() - 3)
-      return MoveType::Free();
-    if (i == c.controlPoints().size() - 3)
-      return MoveType::Tangent({(der1_1[1] ^ der1_1[3]).normalize()});
-    return MoveType::Fixed();
-  };
-  bsplineFit(c, points, constraint, 0);
+
+  if (true) {
+    // Better curve approximation
+    PointVector points;
+    size_t start = 0, step = 1, res = quads[quad_index].resolution;
+    if (side == 3)
+      start = res;
+    if (side == 2)
+      start = res * (res + 1);
+    if (side == 1 || side == 3)
+      step = res + 1;
+    for (size_t i = 0; i <= res; ++i)
+      points.push_back(quads[quad_index].samples[start+step*i]);
+    auto constraint = [=](size_t i) -> MoveConstraint {
+      if (i == 2)
+        return MoveType::Tangent({(der1_0[1] ^ der1_0[3]).normalize()});
+      if (i > 2 && i < c.controlPoints().size() - 3)
+        return MoveType::Free();
+      if (i == c.controlPoints().size() - 3)
+        return MoveType::Tangent({(der1_1[1] ^ der1_1[3]).normalize()});
+      return MoveType::Fixed();
+    };
+    bsplineFit(c, points, constraint, 0);
+  }
 
   BSCurve c1({
       der1_0[0] + der1_0[3],
@@ -591,6 +615,36 @@ BSSurface QuadFit::innerBoundaryRibbon(const std::vector<BSSurface> &quintic_pat
   // c1 = c1.insertKnot(0.75, 1);
   // c2 = c2.insertKnot(0.25, 1);
   // c2 = c2.insertKnot(0.75, 1);
+
+  if (true) {
+    // Better normal approximation
+    size_t res = quads[quad_index].resolution;
+    auto cross = crossSamples(quads[quad_index].samples, side, res);
+    PointVector points;
+    VectorVector normals;
+    for (size_t i = 0; i <= res; ++i) {
+      double u = (double)i / res;
+      VectorVector der;
+      c.eval(u, 1, der);
+      const auto &[p1, p2] = cross[i];
+      auto normal = ((p2 - p1) ^ der[1]).normalize();
+      points.push_back(p1);
+      normals.push_back(normal);
+    }
+
+    auto fixCenter = [&](BSCurve &curve) {
+      auto constraint = [=](size_t i) -> MoveConstraint {
+        if (i >= 2 && i < curve.controlPoints().size() - 2)
+          return MoveType::Normal({normals[res/2]}); // Note: this assumes that resolution is even!
+        return MoveType::Fixed();
+      };
+      bsplineFit(curve, points, normals, constraint);
+    };
+
+    fixCenter(c1);
+    fixCenter(c2);
+  }
+
   return connectG1(c, c1, c2);
 }
 
@@ -809,25 +863,14 @@ std::vector<BSSurface> QuadFit::fit() {
     auto res = q.resolution;
     double max_err = 0, max_t_err = 0;
     size_t max_p, max_t;
+    auto cross = crossSamples(q.samples, side, res);
     for (size_t i = 0; i <= res; ++i) {
-      size_t index = i, index2 = index + res + 1;
-      auto u = (double)index / res;
-      if (side == 1) {
-        index = index * (res + 1);
-        index2 = index + 1;
-      } else if (side == 2) {
-        index = res * (res + 1) + index;
-        index2 = index - (res + 1);
-      }
-      else if (side == 3) {
-        index = index * (res + 1) + res;
-        index2 = index - 1;
-      }
-      const auto &p1 = q.samples[index];
+      auto u = (double)i / res;
+      const auto &p1 = cross[i].first;
       auto p2 = closestPoint(baseCurve(b.sextic), p1, u, 20, 0, 0);
       VectorMatrix der;
       b.sextic.eval(u, 0, 1, der);
-      auto n1 = (der[1][0] ^ (q.samples[index2] - p1)).normalize();
+      auto n1 = (der[1][0] ^ (cross[i].second - cross[i].first)).normalize();
       auto n2 = (der[1][0] ^ der[0][1]).normalize();
       auto err = (p1 - p2).norm();
       auto t_err = std::acos(std::min(std::abs(n1 * n2), 1.0)) * 180 / M_PI;

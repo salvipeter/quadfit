@@ -23,7 +23,7 @@ void bsplineFit(BSCurve &curve, const PointVector &samples,
   const auto &basis = curve.basis();
   size_t p = basis.degree();
   auto &cpts = curve.controlPoints();
-  auto n = cpts.size();
+  size_t n = cpts.size();
   size_t resolution = samples.size() - 1;
 
   std::map<size_t, size_t> index_map, tangent_map;
@@ -68,12 +68,13 @@ void bsplineFit(BSCurve &curve, const PointVector &samples,
     }
   }
 
-  for (size_t i = 1; i < n - 1; ++i) {
-    addValue(index, i, smoothness);
-    addValue(index, i - 1, -0.5 * smoothness);
-    addValue(index, i + 1, -0.5 * smoothness);
-    index += 3;
-  }
+  if (smoothness != 0)
+    for (size_t i = 1; i < n - 1; ++i) {
+      addValue(index, i, smoothness);
+      addValue(index, i - 1, -0.5 * smoothness);
+      addValue(index, i + 1, -0.5 * smoothness);
+      index += 3;
+    }
 
   for (auto [i, row] : tangent_map) {
     auto normal = std::get<MoveType::Tangent>(constraint(i)).normal;
@@ -89,11 +90,8 @@ void bsplineFit(BSCurve &curve, const PointVector &samples,
   bd << A.transpose() * b, d;
   Eigen::VectorXd x = AC.colPivHouseholderQr().solve(bd);
 
-  for (size_t i = 0; i < n; ++i)
-    if (!std::holds_alternative<MoveType::Fixed>(constraint(i))) {
-      size_t k = index_map.at(i);
-      cpts[i] = Point3D(x(3*k), x(3*k+1), x(3*k+2));
-    }
+  for (auto [i, k] : index_map)
+    cpts[i] = Point3D(x(3 * k), x(3 * k + 1), x(3 * k + 2));
 }
 
 void bsplineFit(BSSurface &surface, size_t resolution, const PointVector &samples,

@@ -550,6 +550,8 @@ BSSurface QuadFit::innerBoundaryRibbon(const std::vector<BSSurface> &quintic_pat
                der1_1[0] });
 
   // Better curve approximation
+  // c = c.insertKnot(0.25, 1);
+  // c = c.insertKnot(0.75, 1);
   PointVector points;
   size_t start = 0, step = 1, res = quads[quad_index].resolution;
   if (side == 3)
@@ -563,7 +565,9 @@ BSSurface QuadFit::innerBoundaryRibbon(const std::vector<BSSurface> &quintic_pat
   auto constraint = [=](size_t i) -> MoveConstraint {
     if (i == 2)
       return MoveType::Tangent({(der1_0[1] ^ der1_0[3]).normalize()});
-    if (i == 3)
+    if (i > 2 && i < c.controlPoints().size() - 3)
+      return MoveType::Free();
+    if (i == c.controlPoints().size() - 3)
       return MoveType::Tangent({(der1_1[1] ^ der1_1[3]).normalize()});
     return MoveType::Fixed();
   };
@@ -574,7 +578,6 @@ BSSurface QuadFit::innerBoundaryRibbon(const std::vector<BSSurface> &quintic_pat
       der1_0[0] + der1_0[1] / 3 + der1_0[3] + der1_0[4] / 3,
       der1_1[0] + der1_1[1] / 3 + der1_1[3] + der1_1[4] / 3,
       der1_1[0] + der1_1[3]});
-  c1 = c1.insertKnot(0.5, 1);
   BSCurve c2({
       der2_0[0] + der2_0[3],
       der2_0[0] + der2_0[1] / 3 + der2_0[3] + der2_0[4] / 3,
@@ -582,7 +585,12 @@ BSSurface QuadFit::innerBoundaryRibbon(const std::vector<BSSurface> &quintic_pat
       der2_1[0] + der2_1[3]});
   if (b.reversed != b_opp.reversed)
     c2.reverse();
+  c1 = c1.insertKnot(0.5, 1);
   c2 = c2.insertKnot(0.5, 1);
+  // c1 = c1.insertKnot(0.25, 1);
+  // c1 = c1.insertKnot(0.75, 1);
+  // c2 = c2.insertKnot(0.25, 1);
+  // c2 = c2.insertKnot(0.75, 1);
   return connectG1(c, c1, c2);
 }
 

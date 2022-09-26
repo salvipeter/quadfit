@@ -548,6 +548,27 @@ BSSurface QuadFit::innerBoundaryRibbon(const std::vector<BSSurface> &quintic_pat
                der1_1[0] + der1_1[1] * 3 / 8 + der1_1[2] / 24,
                der1_1[0] + der1_1[1] / 8,
                der1_1[0] });
+
+  // Better curve approximation
+  PointVector points;
+  size_t start = 0, step = 1, res = quads[quad_index].resolution;
+  if (side == 3)
+    start = res;
+  if (side == 2)
+    start = res * (res + 1);
+  if (side == 1 || side == 3)
+    step = res + 1;
+  for (size_t i = 0; i <= res; ++i)
+    points.push_back(quads[quad_index].samples[start+step*i]);
+  auto constraint = [=](size_t i) -> MoveConstraint {
+    if (i == 2)
+      return MoveType::Tangent({(der1_0[1] ^ der1_0[3]).normalize()});
+    if (i == 3)
+      return MoveType::Tangent({(der1_1[1] ^ der1_1[3]).normalize()});
+    return MoveType::Fixed();
+  };
+  bsplineFit(c, points, constraint, 0);
+
   BSCurve c1({
       der1_0[0] + der1_0[3],
       der1_0[0] + der1_0[1] / 3 + der1_0[3] + der1_0[4] / 3,

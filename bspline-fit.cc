@@ -19,7 +19,7 @@ using VecMap = Eigen::Map<const Eigen::Vector3d>;
 
 void bsplineFit(BSCurve &curve, const PointVector &samples,
                 const std::function<MoveConstraint(size_t)> &constraint,
-                double smoothness) {
+                double deviation_penalty, double smoothness) {
   const auto &basis = curve.basis();
   size_t p = basis.degree();
   auto &cpts = curve.controlPoints();
@@ -37,11 +37,12 @@ void bsplineFit(BSCurve &curve, const PointVector &samples,
         normal_map[i] = n_nconstr++;
     }
 
+  size_t n_deviation = deviation_penalty > 0 ? nvars : 0;
   size_t n_smoothing = smoothness == 0 ? 0 : n - 1;
   size_t n_rows = samples.size() + n_smoothing;
   size_t n_constr = n_tconstr + n_nconstr * 3;
-  Eigen::MatrixXd A(n_rows * 3, nvars * 3), C(n_constr, nvars * 3);
-  Eigen::VectorXd b(n_rows * 3), d(n_constr);
+  Eigen::MatrixXd A(n_rows * 3 + n_deviation * 3, nvars * 3), C(n_constr, nvars * 3);
+  Eigen::VectorXd b(n_rows * 3 + n_deviation * 3), d(n_constr);
 
   A.setZero(); C.setZero();
 
@@ -77,6 +78,16 @@ void bsplineFit(BSCurve &curve, const PointVector &samples,
     }
   }
 
+  if (deviation_penalty > 0)
+    for (size_t i = 0; i < n; ++i)
+      if (!std::holds_alternative<MoveType::Fixed>(constraint(i))) {
+        size_t k = index_map.at(i);
+        for (size_t j = 0; j < 3; ++j) {
+          A(n_rows * 3 + k * 3 + j, k * 3 + j) = deviation_penalty;
+          b(n_rows * 3 + k * 3 + j) = cpts[i][j] * deviation_penalty;
+        }
+      }
+
   for (auto [i, row] : tangent_map) {
     auto normal = std::get<MoveType::Tangent>(constraint(i)).normal;
     for (size_t j = 0; j < 3; ++j)
@@ -109,7 +120,8 @@ void bsplineFit(BSCurve &curve, const PointVector &samples,
 }
 
 void bsplineFit(BSCurve &curve, const PointVector &points, const PointVector &normals,
-                const std::function<MoveConstraint(size_t)> &constraint) {
+                const std::function<MoveConstraint(size_t)> &constraint,
+                double deviation_penalty) {
   const auto &basis = curve.basis();
   size_t p = basis.degree();
   auto &cpts = curve.controlPoints();
@@ -127,10 +139,11 @@ void bsplineFit(BSCurve &curve, const PointVector &points, const PointVector &no
         normal_map[i] = n_nconstr++;
     }
 
+  size_t n_deviation = deviation_penalty > 0 ? nvars : 0;
   size_t n_rows = points.size();
   size_t n_constr = n_tconstr + n_nconstr * 3;
-  Eigen::MatrixXd A(n_rows, nvars * 3), C(n_constr, nvars * 3);
-  Eigen::VectorXd b(n_rows), d(n_constr);
+  Eigen::MatrixXd A(n_rows + n_deviation * 3, nvars * 3), C(n_constr, nvars * 3);
+  Eigen::VectorXd b(n_rows + n_deviation * 3), d(n_constr);
 
   A.setZero(); C.setZero();
 
@@ -154,6 +167,16 @@ void bsplineFit(BSCurve &curve, const PointVector &points, const PointVector &no
       addValue(i, i1, normals[i] * coeff[k]);
     }
   }
+
+  if (deviation_penalty > 0)
+    for (size_t i = 0; i < n; ++i)
+      if (!std::holds_alternative<MoveType::Fixed>(constraint(i))) {
+        size_t k = index_map.at(i);
+        for (size_t j = 0; j < 3; ++j) {
+          A(n_rows + k * 3 + j, k * 3 + j) = deviation_penalty;
+          b(n_rows + k * 3 + j) = cpts[i][j] * deviation_penalty;
+        }
+      }
 
   for (auto [i, row] : tangent_map) {
     auto normal = std::get<MoveType::Tangent>(constraint(i)).normal;

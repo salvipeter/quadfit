@@ -24,6 +24,7 @@ private:
     std::array<Geometry::Vector3D, 4> twists; // u=v=0; u=1,v=0; u=v=1; u=0,v=1
     size_t resolution;
     Geometry::PointVector samples;
+    Geometry::VectorVector normals;
   };
 
   std::vector<Geometry::BSSurface> initialFit() const;

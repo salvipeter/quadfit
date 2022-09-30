@@ -77,15 +77,18 @@ std::string QuadFit::readPWGB(std::string filename) {
     }
   }
 
-  // Part 4 : Sampled points
+  // Part 4 : Sampled points/normals
   for (size_t i = 0; i < n_quads; ++i) {
     size_t res;
     f >> res;
     quads[i].resolution = res;
     size_t n_samples = (res + 1) * (res + 1);
     quads[i].samples.resize(n_samples);
-    for (size_t j = 0; j < n_samples; ++j)
+    quads[i].normals.resize(n_samples);
+    for (size_t j = 0; j < n_samples; ++j) {
       quads[i].samples[j] = readPoint(f);
+      quads[i].normals[j] = readPoint(f);
+    }
   }
 
   update();
@@ -528,24 +531,20 @@ static VectorVector extractDerivatives(const BSSurface &surface, size_t side, bo
            der[0][1] * v_sign, der[1][1] * u_sign * v_sign };
 }
 
-static auto crossSamples(const PointVector &samples, size_t side, size_t res) {
-  std::vector<std::pair<Vector3D, Vector3D>> result;
+static auto edgeSamples(const PointVector &samples, const VectorVector &normals,
+                         size_t side, size_t res) {
+  std::vector<std::pair<Point3D, Vector3D>> result;
   for (size_t i = 0; i <= res; ++i) {
-    size_t index = i, index2 = index + res + 1;
-    if (side == 1) {
+    size_t index = i;
+    if (side == 1)
       index = index * (res + 1);
-      index2 = index + 1;
-    } else if (side == 2) {
+    else if (side == 2)
       index = res * (res + 1) + index;
-      index2 = index - (res + 1);
-    }
-    else if (side == 3) {
+    else if (side == 3)
       index = index * (res + 1) + res;
-      index2 = index - 1;
-    }
-    const auto &p1 = samples[index];
-    const auto &p2 = samples[index2];
-    result.emplace_back(p1, p2);
+    const auto &p = samples[index];
+    const auto &n = normals[index];
+    result.emplace_back(p, n);
   }
   return result;
 }
@@ -594,7 +593,7 @@ BSSurface QuadFit::innerBoundaryRibbon(const std::vector<BSSurface> &quintic_pat
         return MoveType::Tangent({(der1_1[1] ^ der1_1[3]).normalize()});
       return MoveType::Fixed();
     };
-    bsplineFit(c, points, constraint, 0);
+    bsplineFit(c, points, constraint, 1e-3, 0);
   }
 
   BSCurve c1({
@@ -619,16 +618,13 @@ BSSurface QuadFit::innerBoundaryRibbon(const std::vector<BSSurface> &quintic_pat
   if (true) {
     // Better normal approximation
     size_t res = quads[quad_index].resolution;
-    auto cross = crossSamples(quads[quad_index].samples, side, res);
+    auto cross = edgeSamples(quads[quad_index].samples, quads[quad_index].normals, side, res);
     PointVector points;
     VectorVector normals;
     for (size_t i = 0; i <= res; ++i) {
-      double u = (double)i / res;
-      VectorVector der;
-      c.eval(u, 1, der);
-      const auto &[p1, p2] = cross[i];
-      auto normal = ((p2 - p1) ^ der[1]).normalize();
-      points.push_back(p1);
+      const auto &[p, normal] = cross[i];
+      // points.push_back(p);
+      points.push_back(c.eval((double)i / res));
       normals.push_back(normal);
     }
 
@@ -638,7 +634,7 @@ BSSurface QuadFit::innerBoundaryRibbon(const std::vector<BSSurface> &quintic_pat
           return MoveType::Normal({normals[res/2]}); // Note: this assumes that resolution is even!
         return MoveType::Fixed();
       };
-      bsplineFit(curve, points, normals, constraint);
+      bsplineFit(curve, points, normals, constraint, 1e-15);
     };
 
     fixCenter(c1);
@@ -863,14 +859,13 @@ std::vector<BSSurface> QuadFit::fit() {
     auto res = q.resolution;
     double max_err = 0, max_t_err = 0;
     size_t max_p, max_t;
-    auto cross = crossSamples(q.samples, side, res);
+    auto cross = edgeSamples(q.samples, q.normals, side, res);
     for (size_t i = 0; i <= res; ++i) {
       auto u = (double)i / res;
-      const auto &p1 = cross[i].first;
-      auto p2 = closestPoint(baseCurve(b.sextic), p1, u, 20, 0, 0);
+      const auto &[p1, n1] = cross[i];
+      closestPoint(baseCurve(b.sextic), p1, u, 20, 0, 0);
       VectorMatrix der;
-      b.sextic.eval(u, 0, 1, der);
-      auto n1 = (der[1][0] ^ (cross[i].second - cross[i].first)).normalize();
+      auto p2 = b.sextic.eval(u, 0, 1, der);
       auto n2 = (der[1][0] ^ der[0][1]).normalize();
       auto err = (p1 - p2).norm();
       auto t_err = std::acos(std::min(std::abs(n1 * n2), 1.0)) * 180 / M_PI;

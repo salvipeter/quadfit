@@ -39,17 +39,17 @@ PWGB File Format
 <Quad 2 u=0 segment index> <Quad 2 u=0 ribbon index> [interval if index != 0: s0 s1 h0 h1]
 ...
 
-# Fourth part - sampled points
-#   There will be (res + 1) * (res + 1) points for each quad
+# Fourth part - sampled points/normals
+#   There will be (res + 1) * (res + 1) points & normals for each quad
 <Quad 1 sampling resolution>
-<Quad 1 sample point at u=0,v=0: x y z>
-<Quad 1 sample point at u=0,v=1/res: x y z>
+<Quad 1 sample point at u=0,v=0: x y z nx ny nz>
+<Quad 1 sample point at u=0,v=1/res: x y z nx ny nz>
 ...
-<Quad 1 sample point at u=0,v=1: x y z>
-<Quad 1 sample point at u=1/res,v=0: x y z>
-<Quad 1 sample point at u=1/res,v=1/res: x y z>
+<Quad 1 sample point at u=0,v=1: x y z nx ny nz>
+<Quad 1 sample point at u=1/res,v=0: x y z nx ny nz>
+<Quad 1 sample point at u=1/res,v=1/res: x y z nx ny nz>
 ...
-<Quad 1 sample point at u=1,v=1: x y z>
+<Quad 1 sample point at u=1,v=1: x y z nx ny nz>
 <Quad 2 sampling resolution>
 ...
 

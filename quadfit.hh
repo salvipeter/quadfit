@@ -6,7 +6,7 @@
 class QuadFit {
 public:
   std::string readPWGB(std::string filename);      // returns model description
-  void update();                                   // automatically called by readPWGB()
+  void update(std::string mesh_filename);          // (mesh_filename can be "")
   std::vector<Geometry::BSSurface> fit();
 
 private:

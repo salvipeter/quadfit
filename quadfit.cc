@@ -92,8 +92,6 @@ std::string QuadFit::readPWGB(std::string filename) {
     }
   }
 
-  update();
-
   return description;
 }
 
@@ -136,7 +134,7 @@ static void writeVertexCurvatures(const std::vector<Point3D> &vertices,
   }
 }
 
-void QuadFit::update() {
+void QuadFit::update(std::string mesh_filename) {
   auto vertexIndex = [&](const Point3D &p) {
     for (size_t i = 0; i < vertices.size(); ++i)
       if ((p - vertices[i]).norm() < epsilon)
@@ -159,8 +157,12 @@ void QuadFit::update() {
     }
 
   PointVector all_points;
-  for (const auto &q : quads)
-    all_points.insert(all_points.end(), q.samples.begin(), q.samples.end());
+  if (mesh_filename.empty())
+    for (const auto &q : quads)
+      all_points.insert(all_points.end(), q.samples.begin(), q.samples.end());
+  else
+    all_points = TriMesh::readOBJ(mesh_filename).points();
+
   jet = JetWrapper::fit(vertices, JetWrapper::Nearest(all_points));
   // writeVertexCurvatures(vertices, jet, "/tmp/curvatures.vtk");
 }

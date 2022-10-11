@@ -88,6 +88,7 @@ std::string QuadFit::readPWGB(std::string filename) {
     for (size_t j = 0; j < n_samples; ++j) {
       quads[i].samples[j] = readPoint(f);
       quads[i].normals[j] = readPoint(f);
+      quads[i].normals[j].normalize();
     }
   }
 
@@ -572,9 +573,10 @@ BSSurface QuadFit::innerBoundaryRibbon(const std::vector<BSSurface> &quintic_pat
   // c = c.insertKnot(0.25, 1);
   // c = c.insertKnot(0.75, 1);
 
-  if (true) {
+  if (false) {
     // Better curve approximation
     PointVector points;
+    VectorVector normals;
     size_t start = 0, step = 1, res = quads[quad_index].resolution;
     if (side == 3)
       start = res;
@@ -582,8 +584,10 @@ BSSurface QuadFit::innerBoundaryRibbon(const std::vector<BSSurface> &quintic_pat
       start = res * (res + 1);
     if (side == 1 || side == 3)
       step = res + 1;
-    for (size_t i = 0; i <= res; ++i)
+    for (size_t i = 0; i <= res; ++i) {
       points.push_back(quads[quad_index].samples[start+step*i]);
+      normals.push_back(quads[quad_index].normals[start+step*i]);
+    }
     auto constraint = [=](size_t i) -> MoveConstraint {
       if (i == 2)
         return MoveType::Tangent({(der1_0[1] ^ der1_0[3]).normalize()});
@@ -593,7 +597,7 @@ BSSurface QuadFit::innerBoundaryRibbon(const std::vector<BSSurface> &quintic_pat
         return MoveType::Tangent({(der1_1[1] ^ der1_1[3]).normalize()});
       return MoveType::Fixed();
     };
-    bsplineFit(c, points, constraint, 1e-3, 0);
+    bsplineFit(c, points, normals, constraint, 1e-15, 0);
   }
 
   BSCurve c1({
@@ -615,7 +619,7 @@ BSSurface QuadFit::innerBoundaryRibbon(const std::vector<BSSurface> &quintic_pat
   // c2 = c2.insertKnot(0.25, 1);
   // c2 = c2.insertKnot(0.75, 1);
 
-  if (true) {
+  if (false) {
     // Better normal approximation
     size_t res = quads[quad_index].resolution;
     auto cross = edgeSamples(quads[quad_index].samples, quads[quad_index].normals, side, res);

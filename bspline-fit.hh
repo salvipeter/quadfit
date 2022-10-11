@@ -19,6 +19,12 @@ void bsplineFit(Geometry::BSCurve &curve, const Geometry::PointVector &samples,
                 const std::function<MoveConstraint(size_t)> &constraint,
                 double deviation_penalty, double smoothness);
 
+// C(k/n) = Pk and C'(k/n) * Nk = 0
+void bsplineFit(Geometry::BSCurve &curve, const Geometry::PointVector &points,
+                const Geometry::VectorVector &normals,
+                const std::function<MoveConstraint(size_t)> &constraint,
+                double deviation_penalty, double smoothness);
+
 // C(k/n) * Nk = Pk * Nk
 void bsplineFit(Geometry::BSCurve &curve, const Geometry::PointVector &points,
                 const Geometry::VectorVector &normals,

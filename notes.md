@@ -116,5 +116,8 @@ available).
    knots are also inserted into the sextic surface. Then the control
    points of the sextic ribbons are copied into the sextic patch.
    
+1. All free control points of the sextic patches are placed according
+   to a C1 Coons mask.
+
 1. *(TODO: Here we should approximate the sampled points with the
    remaining free control points.)*

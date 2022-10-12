@@ -48,7 +48,8 @@ Workflow
 After reading the PWGB file, a simple topology database is built for
 efficient queries, and surface normals and principal curvatures &
 directions are fitted at the inner vertices with CGAL jet fitting,
-using the supplied sample points.
+using the supplied sample points (or the associated mesh, when
+available).
 
 1. Create an initial fit on all quads. This is a simple bicubic Bézier
    surface interpolating the vertices and the tangents of the segments
@@ -88,14 +89,24 @@ using the supplied sample points.
 1. Compute the local ribbons at both outer and inner segments. First a
    quartic, two-segment B-spline boundary curve is created from the
    already fixed boundary information (end CP, tangent CP, 2nd
-   deriv. CP). Similarly, on both sides of the segment, a cubic,
-   one-segment B-spline curve is fit on the second control row (cross
-   derivatives and twists), into which the same inner knot is inserted
-   (at present this is always 0.5).
+   deriv. CP).
+
+   The free controls of the boundary curve are used to approximate (in
+   a least squares sense) the sampled points, trying to set the curve
+   tangent perpendicular to the normal at these positions. (Note that
+   3rd control points from either end can only move in the normal
+   plane.)
    
-   *(TODO: Here we should approximate the boundary and the normals.)*
+1. Similarly to the previous step, on both sides of the segment, a
+   cubic, one-segment B-spline curve is fit on the second control row
+   (cross derivatives and twists), into which the same inner knot is
+   inserted (at present this is always 0.5).
+
+   The free controls of these curves are used to ensure that the
+   cross-derivatives are perpendicular to the associated normal
+   vectors.
    
-   Next, a direction blend is defined by taking the mean of the
+1. Next, a direction blend is defined by taking the mean of the
    cross-derivatives, and a common local ribbon surface is created
    that interpolates the boundary, the cross-derivatives at the ends,
    and the twists.

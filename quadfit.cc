@@ -575,7 +575,7 @@ BSSurface QuadFit::innerBoundaryRibbon(const std::vector<BSSurface> &quintic_pat
   // c = c.insertKnot(0.25, 1);
   // c = c.insertKnot(0.75, 1);
 
-  if (false) {
+  if (true) {
     // Better curve approximation
     PointVector points;
     VectorVector normals;
@@ -621,7 +621,7 @@ BSSurface QuadFit::innerBoundaryRibbon(const std::vector<BSSurface> &quintic_pat
   // c2 = c2.insertKnot(0.25, 1);
   // c2 = c2.insertKnot(0.75, 1);
 
-  if (false) {
+  if (true) {
     // Better normal approximation
     size_t res = quads[quad_index].resolution;
     auto cross = edgeSamples(quads[quad_index].samples, quads[quad_index].normals, side, res);
@@ -896,13 +896,16 @@ std::vector<BSSurface> QuadFit::fit() {
     applyMask(r, DiscreteMask::C1_COONS);
 
   // 9. Fit sampled points using inner control points
-  // for (size_t i = 0; i < quads.size(); ++i) {
-  //   auto ncp = result[i].numControlPoints();
-  //   auto fix2 = [&](size_t i, size_t j) {
-  //     return i < 2 || j < 2 || i >= ncp[0] - 2 || j >= ncp[1] - 2;
-  //   };
-  //   bsplineFit(result[i], quads[i].resolution, quads[i].samples, fix2, 0.1);
-  // }
+  for (size_t i = 0; i < quads.size(); ++i) {
+    auto ncp = result[i].numControlPoints();
+    auto constraint = [&](size_t i, size_t j) -> MoveConstraint {
+      if (i < 2 || j < 2 || i >= ncp[0] - 2 || j >= ncp[1] - 2)
+        return MoveType::Fixed();
+      return MoveType::Free();
+    };
+    for (size_t j = 0; j < 5; ++j)
+      bsplineFit(result[i], quads[i].resolution, quads[i].samples, constraint, 1e-15);
+  }
 
   return result;
 }

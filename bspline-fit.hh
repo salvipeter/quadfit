@@ -34,4 +34,4 @@ void bsplineFit(Geometry::BSCurve &curve, const Geometry::PointVector &points,
 void bsplineFit(Geometry::BSSurface &surface, size_t resolution,
                 const Geometry::PointVector &samples,
                 const std::function<MoveConstraint(size_t,size_t)> &constraint,
-                double smoothness);
+                double deviation_penalty);

@@ -6,14 +6,14 @@ JETWRAP=../jet-wrapper
 EXTRACT=../bezier-extractions
 
 # Release
-# CXXFLAGS=-Wall -pedantic -std=c++17 -O3 -DNDEBUG \
-# 		 -I$(LIBGEOM) -I$(JETWRAP) -I$(EXTRACT) -I$(EIGEN)
-# LDFLAGS=-L. -L$(LIBGEOM)/release -lgeom -lomp
+CXXFLAGS=-Wall -pedantic -std=c++17 -O3 -DNDEBUG \
+		 -I$(LIBGEOM) -I$(JETWRAP) -I$(EXTRACT) -I$(EIGEN)
+LDFLAGS=-L. -L$(LIBGEOM)/release -lgeom -lomp
 
 # Debug
-CXXFLAGS=-fsanitize=address -Wall -pedantic -std=c++17 -O0 -g -DDEBUG \
-		 -I$(LIBGEOM) -I$(JETWRAP) -I$(EXTRACT) -I$(EIGEN)
-LDFLAGS=-lasan -L. -L$(LIBGEOM)/debug -lgeom -lomp
+# CXXFLAGS=-Wall -pedantic -std=c++17 -O0 -g -DDEBUG \
+# 		 -I$(LIBGEOM) -I$(JETWRAP) -I$(EXTRACT) -I$(EIGEN)
+# LDFLAGS=-L. -L$(LIBGEOM)/debug -lgeom -lomp
 
 quadfit-test: quadfit-test.o libquadfit.a
 	$(CXX) -o $@ $< -lquadfit $(LDFLAGS)

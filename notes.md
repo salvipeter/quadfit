@@ -131,5 +131,5 @@ available).
 
 1. If, in the previous step, an approximate C0 approach was taken, the
    boundary control points of adjacent quads should be unified by
-   taken the mean of their position. (At inner vertices, we already
+   taking the mean of their position. (At inner vertices, we already
    know the correct positions.)

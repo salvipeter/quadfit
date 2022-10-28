@@ -572,10 +572,10 @@ BSSurface QuadFit::innerBoundaryRibbon(const std::vector<BSSurface> &quintic_pat
                der1_1[0] + der1_1[1] * 3 / 8 + der1_1[2] / 24,
                der1_1[0] + der1_1[1] / 8,
                der1_1[0] });
-  // c = c.insertKnot(0.25, 1);
-  // c = c.insertKnot(0.75, 1);
+  c = c.insertKnot(0.25, 1);
+  c = c.insertKnot(0.75, 1);
 
-  if (true) {
+  if (false) {
     // Better curve approximation
     PointVector points;
     VectorVector normals;
@@ -616,12 +616,12 @@ BSSurface QuadFit::innerBoundaryRibbon(const std::vector<BSSurface> &quintic_pat
     c2.reverse();
   c1 = c1.insertKnot(0.5, 1);
   c2 = c2.insertKnot(0.5, 1);
-  // c1 = c1.insertKnot(0.25, 1);
-  // c1 = c1.insertKnot(0.75, 1);
-  // c2 = c2.insertKnot(0.25, 1);
-  // c2 = c2.insertKnot(0.75, 1);
+  c1 = c1.insertKnot(0.25, 1);
+  c1 = c1.insertKnot(0.75, 1);
+  c2 = c2.insertKnot(0.25, 1);
+  c2 = c2.insertKnot(0.75, 1);
 
-  if (true) {
+  if (false) {
     // Better normal approximation
     size_t res = quads[quad_index].resolution;
     auto cross = edgeSamples(quads[quad_index].samples, quads[quad_index].normals, side, res);
@@ -819,6 +819,34 @@ std::vector<BSSurface> QuadFit::fit() {
                quad.boundaries[2].sextic, quad.boundaries[3].sextic);
   }
 
+  // 9a. Use a mask to compute the placement of the inner control points
+  for (auto &r : result)
+    applyMask(r, DiscreteMask::C1_COONS);
+
+  // 9. Fit sampled points using inner control points
+  for (size_t i = 0; i < quads.size(); ++i) {
+    // PointVector cpts(16);
+    // result[i] = BSSurface(3, 3, cpts);
+    // for (size_t j = 1; j <= 15; ++j) {
+    //   result[i] = result[i].insertKnotU(j / 16.0, 1);
+    //   result[i] = result[i].insertKnotV(j / 16.0, 1);
+    // }
+    auto ncp = result[i].numControlPoints();
+    const auto &quad = quads[i];
+    auto constraint = [&](size_t i, size_t j) -> MoveConstraint {
+      if ((quad.boundaries[0].on_ribbon && i < 2) ||
+          (quad.boundaries[1].on_ribbon && j < 2) ||
+          (quad.boundaries[2].on_ribbon && i >= ncp[0] - 2) ||
+          (quad.boundaries[3].on_ribbon && j >= ncp[1] - 2))
+        return MoveType::Fixed();
+      // if (i < 2 || j < 2 || i >= ncp[0] - 2 || j >= ncp[1] - 2)
+      //   return MoveType::Fixed();
+      return MoveType::Free();
+    };
+    // for (size_t j = 0; j < 5; ++j)
+    bsplineFit(result[i], quad.resolution, quad.samples, constraint, 0);
+  }
+
 #ifdef DEBUG
   std::cout << "\nMaximal errors:\tC0\tG1 (degrees)" << std::endl;
   for (const auto &adj : adjacency) {
@@ -890,22 +918,6 @@ std::vector<BSSurface> QuadFit::fit() {
   }
   std::cout << std::endl;
 #endif // DEBUG
-
-  // 9a. Use a mask to compute the placement of the inner control points
-  for (auto &r : result)
-    applyMask(r, DiscreteMask::C1_COONS);
-
-  // 9. Fit sampled points using inner control points
-  for (size_t i = 0; i < quads.size(); ++i) {
-    auto ncp = result[i].numControlPoints();
-    auto constraint = [&](size_t i, size_t j) -> MoveConstraint {
-      if (i < 2 || j < 2 || i >= ncp[0] - 2 || j >= ncp[1] - 2)
-        return MoveType::Fixed();
-      return MoveType::Free();
-    };
-    for (size_t j = 0; j < 5; ++j)
-      bsplineFit(result[i], quads[i].resolution, quads[i].samples, constraint, 1e-15);
-  }
 
   return result;
 }

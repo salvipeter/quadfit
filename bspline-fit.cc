@@ -393,7 +393,7 @@ void bsplineFit(BSSurface &surface, size_t resolution, const PointVector &sample
     for (size_t j = 0; j <= resolution; ++j, ++index) {
       double v = (double)j / resolution;
 
-      closestPoint(surface, samples[index], u, v, 20, 0, 0);
+      // closestPoint(surface, samples[index], u, v, 20, 0, 0);
 
       size_t span_u = surface.basisU().findSpan(u);
       size_t span_v = surface.basisV().findSpan(v);

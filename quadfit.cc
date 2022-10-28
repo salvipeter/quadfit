@@ -820,17 +820,11 @@ std::vector<BSSurface> QuadFit::fit() {
   }
 
   // 9a. Use a mask to compute the placement of the inner control points
-  for (auto &r : result)
-    applyMask(r, DiscreteMask::C1_COONS);
+  // for (auto &r : result)
+  //   applyMask(r, DiscreteMask::C1_COONS);
 
   // 9. Fit sampled points using inner control points
   for (size_t i = 0; i < quads.size(); ++i) {
-    // PointVector cpts(16);
-    // result[i] = BSSurface(3, 3, cpts);
-    // for (size_t j = 1; j <= 15; ++j) {
-    //   result[i] = result[i].insertKnotU(j / 16.0, 1);
-    //   result[i] = result[i].insertKnotV(j / 16.0, 1);
-    // }
     auto ncp = result[i].numControlPoints();
     const auto &quad = quads[i];
     auto constraint = [&](size_t i, size_t j) -> MoveConstraint {
@@ -845,6 +839,54 @@ std::vector<BSSurface> QuadFit::fit() {
     };
     // for (size_t j = 0; j < 5; ++j)
     bsplineFit(result[i], quad.resolution, quad.samples, constraint, 0);
+  }
+
+  // 10. Fix C0 - TODO: knot vectors may need to be unified
+  for (size_t si = 0; si < adjacency.size(); ++si) {
+    const auto &adj = adjacency[si];
+    if (adj.size() == 2) {
+      const auto &q1 = quads[adj[0].first];
+      const auto &q2 = quads[adj[1].first];
+      auto &s1 = result[adj[0].first];
+      auto &s2 = result[adj[1].first];
+      size_t b1 = adj[0].second;
+      size_t b2 = adj[1].second;
+      bool r1 = q1.boundaries[b1].reversed;
+      bool r2 = q2.boundaries[b2].reversed;
+      auto setIndex = [](const BSSurface &s, size_t b, size_t &j, size_t &n) {
+        size_t m;
+        if (b == 0 || b == 2) {
+          n = s.numControlPoints()[1];
+          m = s.numControlPoints()[0];
+        } else {
+          n = s.numControlPoints()[0];
+          m = s.numControlPoints()[1];
+        }
+        if (b < 2)
+          j = 0;
+        else
+          j = m - 1;
+      };
+      size_t j1, j2, n1, n2;
+      setIndex(s1, b1, j1, n1);
+      setIndex(s2, b2, j2, n2);
+      assert(n1 == n2);
+      for (size_t i1 = 0; i1 < n1; ++i1) {
+        size_t i2 = r1 == r2 ? i1 : n1 - i1 - 1;
+        auto &p1 = b1 % 2 == 0 ? s1.controlPoint(j1, i1) : s1.controlPoint(i1, j1);
+        auto &p2 = b2 % 2 == 0 ? s2.controlPoint(j2, i2) : s2.controlPoint(i2, j2);
+        if (i1 == 0 || i1 == n1 - 1) {
+          const auto &v1 = vertices[endpoints[si].first];
+          const auto &v2 = vertices[endpoints[si].second];
+          p1 = (i1 == 0 && !r1) || (i1 != 0 && r1) ? v1 : v2;
+          p2 = (i2 == 0 && !r2) || (i2 != 0 && r2) ? v1 : v2;
+        } else {
+          auto m = (p1 + p2) / 2;
+          p1 = m;
+          p2 = m;
+        }
+      }
+    }
   }
 
 #ifdef DEBUG
@@ -882,7 +924,9 @@ std::vector<BSSurface> QuadFit::fit() {
     std::cout << max_p_error << " \t" << max_t_error << std::endl;
   }
   std::cout << std::endl;
+#endif // DEBUG
 
+#ifdef DEBUG
   std::cout << "Curve maximal deviation:\tC0\tG1 (degrees)" << std::endl;
   for (const auto &adj : adjacency) {
     if (adj.size() < 2)

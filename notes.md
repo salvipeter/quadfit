@@ -119,5 +119,17 @@ available).
 1. All free control points of the sextic patches are placed according
    to a C1 Coons mask.
 
-1. *(TODO: Here we should approximate the sampled points with the
-   remaining free control points.)*
+1. As an alternative, we can approximate the sampled points with the
+   remaining free control points.  Here we have the option of
+   releasing some of the previously fixed control points, which seems
+   to lead to better results. Ribbons should still be interpolated,
+   but all other vertices may be free to move (of course this makes
+   the whole curve approximation and direction blending process
+   useless). This results in a patch that is only approximately C0/G1
+   between the quads, but the errors are very low and overall quality
+   is much better.
+
+1. If, in the previous step, an approximate C0 approach was taken, the
+   boundary control points of adjacent quads should be unified by
+   taken the mean of their position. (At inner vertices, we already
+   know the correct positions.)

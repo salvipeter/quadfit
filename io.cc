@@ -1,3 +1,4 @@
+#include <cmath>
 #include <fstream>
 #include <iterator>
 
@@ -8,18 +9,50 @@ using namespace Geometry;
 void writeCurves(const std::vector<BSCurve> &curves, std::string filename, size_t resolution) {
   std::ofstream f(filename);
   f.exceptions(std::ios::failbit | std::ios::badbit);
+  f << "# vtk DataFile Version 2.0" << std::endl;
+  f << "Curves with  curvature values & normal directions" << std::endl;
+  f << "ASCII" << std::endl;
+  f << "DATASET POLYDATA" << std::endl;
+
+  f << "POINTS " << curves.size() * (resolution + 1) << " float" << std::endl;
   for (const auto &curve : curves) {
     double lo = curve.basis().low(), hi = curve.basis().high();
     for (size_t i = 0; i <= resolution; ++i) {
       double u = lo + (double)i / resolution * (hi - lo);
-      f << "v " << curve.eval(u) << std::endl;
+      f << curve.eval(u) << std::endl;
     }
   }
+
+  f << "LINES " << curves.size() << " " << curves.size() * (resolution + 2) << std::endl;
   for (size_t j = 0; j < curves.size(); ++j) {
-    f << "l";
+    f << resolution + 1;
     for (size_t i = 0; i <= resolution; ++i)
-      f << ' ' << j * (resolution + 1) + i + 1;
+      f << ' ' << j * (resolution + 1) + i;
     f << std::endl;
+  }
+
+  f << "POINT_DATA " << curves.size() * (resolution + 1) << std::endl;
+  f << "NORMALS normal float" << std::endl;
+  for (const auto &curve : curves) {
+    double lo = curve.basis().low(), hi = curve.basis().high();
+    for (size_t i = 0; i <= resolution; ++i) {
+      double u = lo + (double)i / resolution * (hi - lo);
+      VectorVector der;
+      curve.eval(u, 2, der);
+      f << (der[0] ^ (der[0] ^ der[1])).normalize() << std::endl;
+    }
+  }
+
+  f << "SCALARS curvature float 1" << std::endl;
+  f << "LOOKUP_TABLE default" << std::endl;
+  for (const auto &curve : curves) {
+    double lo = curve.basis().low(), hi = curve.basis().high();
+    for (size_t i = 0; i <= resolution; ++i) {
+      double u = lo + (double)i / resolution * (hi - lo);
+      VectorVector der;
+      curve.eval(u, 2, der);
+      f << (der[0] ^ der[1]).norm() / std::pow(der[0].norm(), 3) << std::endl;
+    }
   }
 }
 

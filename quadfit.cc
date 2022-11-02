@@ -175,6 +175,18 @@ std::vector<BSSurface> QuadFit::initialFit() const {
 
   for (size_t i = 0; i < quads.size(); ++i) {
     auto &b = quads[i].boundaries;
+
+    // High-precision fit to get good tangent vectors
+    // BSSurface simple_fit(3, 3, PointVector(16));
+    // for (size_t j = 1; j <= 15; ++j) {
+    //   simple_fit = simple_fit.insertKnotU(j / 16.0, 1);
+    //   simple_fit = simple_fit.insertKnotV(j / 16.0, 1);
+    // }
+    // auto constraint = [&](size_t i, size_t j) -> MoveConstraint {
+    //   return MoveType::Free();
+    // };
+    // bsplineFit(simple_fit, quads[i].resolution, quads[i].samples, constraint, 0);
+
     PointVector cpts(16);
     for (size_t j = 0; j < 4; ++j) {
       auto getCP = [&](size_t k) {
@@ -202,6 +214,24 @@ std::vector<BSSurface> QuadFit::initialFit() const {
     setTangentLength(0, 4, 8, 12);
     setTangentLength(12, 13, 14, 15);
     setTangentLength(3, 7, 11, 15);
+    // auto setTangentLength = [&](bool u, bool u_end, bool v_end) {
+    //   size_t i = u_end ? (v_end ? 15 : 12) : (v_end ? 3 : 0);
+    //   size_t j = i + (u ? (u_end ? -4 : 4) : (v_end ? -1 : 1));
+    //   VectorMatrix der;
+    //   simple_fit.eval(u_end ? 1 : 0, v_end ? 1 : 0, 1, der);
+    //   Vector3D d = u ? der[1][0] : der[0][1];
+    //   if ((u && u_end) || (!u && v_end))
+    //     d *= -1;
+    //   cpts[j] = cpts[i] + d / 3;
+    // };
+    // setTangentLength(false, false, false);
+    // setTangentLength(false, false, true);
+    // setTangentLength(false, true, false);
+    // setTangentLength(false, true, true);
+    // setTangentLength(true, false, false);
+    // setTangentLength(true, false, true);
+    // setTangentLength(true, true, false);
+    // setTangentLength(true, true, true);
     auto setTwist = [&](size_t p, size_t d1, size_t d2, size_t t) {
       cpts[t] = cpts[d1] + (cpts[d2] - cpts[p]);
     };
@@ -820,19 +850,25 @@ std::vector<BSSurface> QuadFit::fit() {
   }
 
   // 9a. Use a mask to compute the placement of the inner control points
-  // for (auto &r : result)
-  //   applyMask(r, DiscreteMask::C1_COONS);
+  for (auto &r : result)
+    applyMask(r, DiscreteMask::C1_COONS);
 
   // 9. Fit sampled points using inner control points
   for (size_t i = 0; i < quads.size(); ++i) {
-    auto ncp = result[i].numControlPoints();
     const auto &quad = quads[i];
+    result[i] = BSSurface(3, 3, PointVector(16));
+    size_t inner_knots = 3;
+    for (size_t j = 1; j <= inner_knots; ++j) {
+      result[i] = result[i].insertKnotU((double)j / (inner_knots + 1), 1);
+      result[i] = result[i].insertKnotV((double)j / (inner_knots + 1), 1);
+    }
+    auto ncp = result[i].numControlPoints();
     auto constraint = [&](size_t i, size_t j) -> MoveConstraint {
-      if ((quad.boundaries[0].on_ribbon && i < 2) ||
-          (quad.boundaries[1].on_ribbon && j < 2) ||
-          (quad.boundaries[2].on_ribbon && i >= ncp[0] - 2) ||
-          (quad.boundaries[3].on_ribbon && j >= ncp[1] - 2))
-        return MoveType::Fixed();
+      // if ((quad.boundaries[0].on_ribbon && i < 2) ||
+      //     (quad.boundaries[1].on_ribbon && j < 2) ||
+      //     (quad.boundaries[2].on_ribbon && i >= ncp[0] - 2) ||
+      //     (quad.boundaries[3].on_ribbon && j >= ncp[1] - 2))
+      //   return MoveType::Fixed();
       // if (i < 2 || j < 2 || i >= ncp[0] - 2 || j >= ncp[1] - 2)
       //   return MoveType::Fixed();
       return MoveType::Free();
@@ -890,10 +926,42 @@ std::vector<BSSurface> QuadFit::fit() {
   }
 
 #ifdef DEBUG
+  auto evalNormal = [&](const BSSurface &s, size_t side, double u) ->
+    std::pair<Point3D, Vector3D>
+    {
+      VectorMatrix der;
+      if (side == 0 || side == 2) // v-side
+        s.eval(side == 0 ? 0 : 1, u, 1, der);
+      else // u-side
+        s.eval(u, side == 1 ? 0 : 1, 1, der);
+      return { der[0][0], (der[1][0] ^ der[0][1]).normalize() };
+    };
   std::cout << "\nMaximal errors:\tC0\tG1 (degrees)" << std::endl;
   for (const auto &adj : adjacency) {
-    if (adj.size() < 2)
+    if (adj.size() < 2) {
+      size_t side = adj[0].second;
+      const auto &b = quads[adj[0].first].boundaries[side];
+      const auto &q = result[adj[0].first];
+      size_t resolution = 100;
+      const auto &r = ribbons[b.ribbon];
+      std::cout << "Ribbon #" << b.ribbon + 1 << ":\t";
+      double max_p_error = 0, max_t_error = 0;
+      for (size_t i = 0; i <= resolution; ++i) {
+        double u = (double)i / resolution;
+        double v = b.s0 * (1 - u) + b.s0 * u;
+        auto [p1, n1] = evalNormal(q, side, u);
+        closestPoint(r[0], p1, v, 20, 0, 0);
+        VectorVector der;
+        Point3D p2 = r[0].eval(v, 1, der);
+        Vector3D n2 = (der[1] ^ (r[1].eval(v) - p2)).normalize();
+        double p_error = (p1 - p2).norm();
+        double t_error = std::acos(std::min(std::max(n1 * n2, -1.0), 1.0)) * 180 / M_PI;
+        max_p_error = std::max(max_p_error, p_error);
+        max_t_error = std::max(max_t_error, t_error);
+      }
+      std::cout << max_p_error << " \t" << max_t_error << std::endl;
       continue;
+    }
     std::cout << "Quads #" << adj[0].first + 1 << " - #" << adj[1].first + 1 << ":\t";
     const auto &q1 = result[adj[0].first];
     const auto &q2 = result[adj[1].first];
@@ -902,16 +970,6 @@ std::vector<BSSurface> QuadFit::fit() {
       quads[adj[1].first].boundaries[side2].reversed;
     double max_p_error = 0, max_t_error = 0;
     size_t resolution = 100;
-    auto evalNormal = [&](const BSSurface &s, size_t side, double u) ->
-      std::pair<Point3D, Vector3D>
-      {
-        VectorMatrix der;
-        if (side == 0 || side == 2) // v-side
-          s.eval(side == 0 ? 0 : 1, u, 1, der);
-        else // u-side
-          s.eval(u, side == 1 ? 0 : 1, 1, der);
-        return { der[0][0], (der[1][0] ^ der[0][1]).normalize() };
-      };
     for (size_t i = 0; i <= resolution; ++i) {
       double u = (double)i / resolution;
       auto [p1, n1] = evalNormal(q1, side1, u);

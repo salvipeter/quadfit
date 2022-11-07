@@ -20,13 +20,13 @@ Command line switches:
 
 | Switch                       | Meaning                                                      |
 |------------------------------|--------------------------------------------------------------|
-| --mesh=<filename.obj>        | Use the specified mesh for jet-fitting curvatures            |
-| --resolution=<n>             | Use the specified resolution for mesh output                 |
+| --mesh=*filename.obj*        | Use the specified mesh for jet-fitting curvatures            |
+| --resolution=*n*             | Use the specified resolution for mesh output                 |
 | --extra-knots                | Use 4-segment quartic curves                                 |
 | --fit-curves                 | Fit the quartic curves on sampled points                     |
 | --fit-normals                | Fit the cross-derivative curves on sampled normals           |
 | --coons-patch                | Create Coons patches and do not fit to interior samples      |
-| --cubic-fit=<n>              | Use cubic splines with <n> inner knots to fit                |
+| --cubic-fit=*n*              | Use cubic splines with *n* inner knots to fit                |
 | --fix-c0-inside              | Fix C0 continuity at the subdivision curves                  |
 | --fix-c0-outside             | Fix C0 continuity at the ribbons                             |
 | --retain-direction-blends    | Retain the shared direction blends between the quads         |

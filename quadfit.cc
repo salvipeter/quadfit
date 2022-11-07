@@ -785,6 +785,102 @@ static BSCurve baseCurve(const BSSurface &ribbon) {
   return { ribbon.basisU().degree(), ribbon.basisU().knots(), cpts };
 }
 
+void QuadFit::printContinuityErrors(const std::vector<BSSurface> &result) const {
+  auto evalNormal = [&](const BSSurface &s, size_t side, double u) ->
+    std::pair<Point3D, Vector3D>
+    {
+      VectorMatrix der;
+      if (side == 0 || side == 2) // v-side
+        s.eval(side == 0 ? 0 : 1, u, 1, der);
+      else // u-side
+        s.eval(u, side == 1 ? 0 : 1, 1, der);
+      return { der[0][0], (der[1][0] ^ der[0][1]).normalize() };
+    };
+  std::cout << "\nMaximal errors:\tC0\tG1 (degrees)" << std::endl;
+  for (const auto &adj : adjacency) {
+    if (adj.size() < 2) {
+      size_t side = adj[0].second;
+      const auto &b = quads[adj[0].first].boundaries[side];
+      const auto &q = result[adj[0].first];
+      size_t resolution = 100;
+      const auto &r = ribbons[b.ribbon];
+      std::cout << "Ribbon #" << b.ribbon + 1 << ":\t";
+      double max_p_error = 0, max_t_error = 0;
+      for (size_t i = 0; i <= resolution; ++i) {
+        double u = (double)i / resolution;
+        double v = b.s0 * (1 - u) + b.s0 * u;
+        auto [p1, n1] = evalNormal(q, side, u);
+        closestPoint(r[0], p1, v, 20, 0, 0);
+        VectorVector der;
+        Point3D p2 = r[0].eval(v, 1, der);
+        Vector3D n2 = (der[1] ^ (r[1].eval(v) - p2)).normalize();
+        double p_error = (p1 - p2).norm();
+        double t_error = std::acos(std::min(std::max(n1 * n2, -1.0), 1.0)) * 180 / M_PI;
+        max_p_error = std::max(max_p_error, p_error);
+        max_t_error = std::max(max_t_error, t_error);
+      }
+      std::cout << max_p_error << " \t" << max_t_error << std::endl;
+      continue;
+    }
+    std::cout << "Quads #" << adj[0].first + 1 << " - #" << adj[1].first + 1 << ":\t";
+    const auto &q1 = result[adj[0].first];
+    const auto &q2 = result[adj[1].first];
+    size_t side1 = adj[0].second, side2 = adj[1].second;
+    bool reversed = quads[adj[0].first].boundaries[side1].reversed !=
+      quads[adj[1].first].boundaries[side2].reversed;
+    double max_p_error = 0, max_t_error = 0;
+    size_t resolution = 100;
+    for (size_t i = 0; i <= resolution; ++i) {
+      double u = (double)i / resolution;
+      auto [p1, n1] = evalNormal(q1, side1, u);
+      auto [p2, n2] = evalNormal(q2, side2, reversed ? 1 - u : u);
+      double p_error = (p1 - p2).norm();
+      double t_error = std::acos(std::min(std::max(n1 * n2, -1.0), 1.0)) * 180 / M_PI;
+      max_p_error = std::max(max_p_error, p_error);
+      max_t_error = std::max(max_t_error, t_error);
+    }
+    std::cout << max_p_error << " \t" << max_t_error << std::endl;
+  }
+  std::cout << std::endl;
+}
+
+void QuadFit::printApproximationErrors(const std::vector<BSSurface> &result) const {
+  std::cout << "Curve maximal deviation:\tC0\tG1 (degrees)" << std::endl;
+  for (const auto &adj : adjacency) {
+    if (adj.size() < 2)
+      continue;
+    size_t side = adj[0].second;
+    const auto &q = quads[adj[0].first];
+    const auto &b = q.boundaries[side];
+    auto res = q.resolution;
+    double max_err = 0, max_t_err = 0;
+    size_t max_p = -1, max_t = -1;
+    auto cross = edgeSamples(q.samples, q.normals, side, res);
+    for (size_t i = 0; i <= res; ++i) {
+      auto u = (double)i / res;
+      const auto &[p1, n1] = cross[i];
+      closestPoint(baseCurve(b.sextic), p1, u, 20, 0, 0);
+      VectorMatrix der;
+      auto p2 = b.sextic.eval(u, 0, 1, der);
+      auto n2 = (der[1][0] ^ der[0][1]).normalize();
+      auto err = (p1 - p2).norm();
+      auto t_err = std::acos(std::min(std::abs(n1 * n2), 1.0)) * 180 / M_PI;
+      if (err > max_err) {
+        max_err = err;
+        max_p = i;
+      }
+      if (t_err > max_t_err) {
+        max_t_err = t_err;
+        max_t = i;
+      }
+    }
+    std::cout << "Quads #" << adj[0].first << " - #" << adj[1].first
+              << " (" << max_p << " / " << max_t << "):\t"
+              << max_err << "\t" << max_t_err << std::endl;
+  }
+  std::cout << std::endl;
+}
+
 std::vector<BSSurface> QuadFit::fit(const std::vector<std::string> &switches) {
   // 1. Simple C0 fit
   auto result = initialFit();
@@ -960,101 +1056,11 @@ std::vector<BSSurface> QuadFit::fit(const std::vector<std::string> &switches) {
     std::cerr << "ERROR: C0 fix for ribbons is not implemented yet" << std::endl;
   }
 
-  if (parseSwitch<bool>(switches, "print-continuity-errors")) {
-    auto evalNormal = [&](const BSSurface &s, size_t side, double u) ->
-      std::pair<Point3D, Vector3D>
-      {
-        VectorMatrix der;
-        if (side == 0 || side == 2) // v-side
-          s.eval(side == 0 ? 0 : 1, u, 1, der);
-        else // u-side
-          s.eval(u, side == 1 ? 0 : 1, 1, der);
-        return { der[0][0], (der[1][0] ^ der[0][1]).normalize() };
-      };
-    std::cout << "\nMaximal errors:\tC0\tG1 (degrees)" << std::endl;
-    for (const auto &adj : adjacency) {
-      if (adj.size() < 2) {
-        size_t side = adj[0].second;
-        const auto &b = quads[adj[0].first].boundaries[side];
-        const auto &q = result[adj[0].first];
-        size_t resolution = 100;
-        const auto &r = ribbons[b.ribbon];
-        std::cout << "Ribbon #" << b.ribbon + 1 << ":\t";
-        double max_p_error = 0, max_t_error = 0;
-        for (size_t i = 0; i <= resolution; ++i) {
-          double u = (double)i / resolution;
-          double v = b.s0 * (1 - u) + b.s0 * u;
-          auto [p1, n1] = evalNormal(q, side, u);
-          closestPoint(r[0], p1, v, 20, 0, 0);
-          VectorVector der;
-          Point3D p2 = r[0].eval(v, 1, der);
-          Vector3D n2 = (der[1] ^ (r[1].eval(v) - p2)).normalize();
-          double p_error = (p1 - p2).norm();
-          double t_error = std::acos(std::min(std::max(n1 * n2, -1.0), 1.0)) * 180 / M_PI;
-          max_p_error = std::max(max_p_error, p_error);
-          max_t_error = std::max(max_t_error, t_error);
-        }
-        std::cout << max_p_error << " \t" << max_t_error << std::endl;
-        continue;
-      }
-      std::cout << "Quads #" << adj[0].first + 1 << " - #" << adj[1].first + 1 << ":\t";
-      const auto &q1 = result[adj[0].first];
-      const auto &q2 = result[adj[1].first];
-      size_t side1 = adj[0].second, side2 = adj[1].second;
-      bool reversed = quads[adj[0].first].boundaries[side1].reversed !=
-        quads[adj[1].first].boundaries[side2].reversed;
-      double max_p_error = 0, max_t_error = 0;
-      size_t resolution = 100;
-      for (size_t i = 0; i <= resolution; ++i) {
-        double u = (double)i / resolution;
-        auto [p1, n1] = evalNormal(q1, side1, u);
-        auto [p2, n2] = evalNormal(q2, side2, reversed ? 1 - u : u);
-        double p_error = (p1 - p2).norm();
-        double t_error = std::acos(std::min(std::max(n1 * n2, -1.0), 1.0)) * 180 / M_PI;
-        max_p_error = std::max(max_p_error, p_error);
-        max_t_error = std::max(max_t_error, t_error);
-      }
-      std::cout << max_p_error << " \t" << max_t_error << std::endl;
-    }
-    std::cout << std::endl;
-  }
+  if (parseSwitch<bool>(switches, "print-continuity-errors"))
+    printContinuityErrors(result);
 
-  if (parseSwitch<bool>(switches, "print-approximation-errors")) {
-    std::cout << "Curve maximal deviation:\tC0\tG1 (degrees)" << std::endl;
-    for (const auto &adj : adjacency) {
-      if (adj.size() < 2)
-        continue;
-      size_t side = adj[0].second;
-      const auto &q = quads[adj[0].first];
-      const auto &b = q.boundaries[side];
-      auto res = q.resolution;
-      double max_err = 0, max_t_err = 0;
-      size_t max_p = -1, max_t = -1;
-      auto cross = edgeSamples(q.samples, q.normals, side, res);
-      for (size_t i = 0; i <= res; ++i) {
-        auto u = (double)i / res;
-        const auto &[p1, n1] = cross[i];
-        closestPoint(baseCurve(b.sextic), p1, u, 20, 0, 0);
-        VectorMatrix der;
-        auto p2 = b.sextic.eval(u, 0, 1, der);
-        auto n2 = (der[1][0] ^ der[0][1]).normalize();
-        auto err = (p1 - p2).norm();
-        auto t_err = std::acos(std::min(std::abs(n1 * n2), 1.0)) * 180 / M_PI;
-        if (err > max_err) {
-          max_err = err;
-          max_p = i;
-        }
-        if (t_err > max_t_err) {
-          max_t_err = t_err;
-          max_t = i;
-        }
-      }
-      std::cout << "Quads #" << adj[0].first << " - #" << adj[1].first
-                << " (" << max_p << " / " << max_t << "):\t"
-                << max_err << "\t" << max_t_err << std::endl;
-    }
-    std::cout << std::endl;
-  }
+  if (parseSwitch<bool>(switches, "print-approximation-errors"))
+    printApproximationErrors(result);
 
   return result;
 }

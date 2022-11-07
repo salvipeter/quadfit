@@ -2,31 +2,37 @@
 
 #include "io.hh"
 #include "quadfit.hh"
+#include "switches.hh"
 
 using namespace Geometry;
 
 int main(int argc, char **argv) {
   if (argc < 2) {
-    std::cerr << "Usage: " << argv[0] << " <input.pwgb> [mesh.obj] [resolution]" << std::endl;
+    std::cerr << "Usage: " << argv[0] << " <input.pwgb> [switches]" << std::endl;
     return 1;
   }
 
-  size_t resolution = 50;
-  std::string mesh_filename = "";
-  if (argc >= 3)
-    mesh_filename = argv[2];
-  if (argc == 4)
-    resolution = std::atoi(argv[3]);
+  std::vector<std::string> switches;
+  for (int i = 2; i < argc; ++i) {
+    if (argv[i][0] != '-' || argv[i][1] != '-') {
+      std::cerr << "Invalid switch: " << argv[i] << std::endl;
+      return 2;
+    }
+    switches.push_back(argv[i]);
+  }
+
+  size_t resolution = 0;
+  parseSwitch<size_t>(switches, "resolution", &resolution, 50);
 
   QuadFit qf;
   auto description = qf.readPWGB(argv[1]);
   std::cout << "Input file \"" << argv[1] << "\" read:" << std::endl;
   std::cout << "\t" << description << std::endl;
 
-  qf.update(mesh_filename);
+  qf.update(switches);
   std::cout << "Topology & surface curvatures updated" << std::endl;
 
-  auto surfaces = qf.fit();
+  auto surfaces = qf.fit(switches);
   std::cout << "Fit of " << surfaces.size() << " surfaces completed" << std::endl;
 
   std::cout << "Output resolution: " << resolution << std::endl;

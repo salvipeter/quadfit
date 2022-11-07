@@ -6,8 +6,8 @@
 class QuadFit {
 public:
   std::string readPWGB(std::string filename);      // returns model description
-  void update(std::string mesh_filename);          // (mesh_filename can be "")
-  std::vector<Geometry::BSSurface> fit();
+  void update(const std::vector<std::string> &switches);
+  std::vector<Geometry::BSSurface> fit(const std::vector<std::string> &switches);
 
 private:
   using Ribbon = std::array<Geometry::BSCurve, 2>; // outer, inner
@@ -34,7 +34,8 @@ private:
   void correctSecondDerivatives(Geometry::BSSurface &quintic, size_t quad_index) const;
   void correctTwists(Geometry::BSSurface &quintic, size_t quad_index) const;
   Geometry::BSSurface innerBoundaryRibbon(const std::vector<Geometry::BSSurface> &quintic_patches,
-                                          size_t quad_index, size_t side) const;
+                                          size_t quad_index, size_t side,
+                                          bool extra_knots, bool fitC0, bool fitG1) const;
 
   std::vector<Ribbon> ribbons;
   std::vector<Geometry::BSCurve> segments;

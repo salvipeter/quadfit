@@ -9,6 +9,7 @@
 #include "discrete-mask.hh"
 #include "fit-ribbon.hh"
 #include "io.hh"
+#include "switches.hh"
 
 using namespace Geometry;
 using JetWrapper::JetData;
@@ -134,7 +135,7 @@ static void writeVertexCurvatures(const std::vector<Point3D> &vertices,
   }
 }
 
-void QuadFit::update(std::string mesh_filename) {
+void QuadFit::update(const std::vector<std::string> &switches) {
   auto vertexIndex = [&](const Point3D &p) {
     for (size_t i = 0; i < vertices.size(); ++i)
       if ((p - vertices[i]).norm() < epsilon)
@@ -157,6 +158,8 @@ void QuadFit::update(std::string mesh_filename) {
     }
 
   PointVector all_points;
+  std::string mesh_filename;
+  parseSwitch<std::string>(switches, "mesh", &mesh_filename);
   if (mesh_filename.empty())
     for (const auto &q : quads)
       all_points.insert(all_points.end(), q.samples.begin(), q.samples.end());
@@ -583,7 +586,8 @@ static auto edgeSamples(const PointVector &samples, const VectorVector &normals,
 }
 
 BSSurface QuadFit::innerBoundaryRibbon(const std::vector<BSSurface> &quintic_patches,
-                                       size_t quad_index, size_t side) const {
+                                       size_t quad_index, size_t side,
+                                       bool extra_knots, bool fitC0, bool fitG1) const {
   const auto &result = quintic_patches;
   size_t i = quad_index;
   auto &b = quads[i].boundaries[side];
@@ -602,10 +606,12 @@ BSSurface QuadFit::innerBoundaryRibbon(const std::vector<BSSurface> &quintic_pat
                der1_1[0] + der1_1[1] * 3 / 8 + der1_1[2] / 24,
                der1_1[0] + der1_1[1] / 8,
                der1_1[0] });
-  c = c.insertKnot(0.25, 1);
-  c = c.insertKnot(0.75, 1);
+  if (extra_knots) {
+    c = c.insertKnot(0.25, 1);
+    c = c.insertKnot(0.75, 1);
+  }
 
-  if (false) {
+  if (fitC0) {
     // Better curve approximation
     PointVector points;
     VectorVector normals;
@@ -646,12 +652,14 @@ BSSurface QuadFit::innerBoundaryRibbon(const std::vector<BSSurface> &quintic_pat
     c2.reverse();
   c1 = c1.insertKnot(0.5, 1);
   c2 = c2.insertKnot(0.5, 1);
-  c1 = c1.insertKnot(0.25, 1);
-  c1 = c1.insertKnot(0.75, 1);
-  c2 = c2.insertKnot(0.25, 1);
-  c2 = c2.insertKnot(0.75, 1);
+  if (extra_knots) {
+    c1 = c1.insertKnot(0.25, 1);
+    c1 = c1.insertKnot(0.75, 1);
+    c2 = c2.insertKnot(0.25, 1);
+    c2 = c2.insertKnot(0.75, 1);
+  }
 
-  if (false) {
+  if (fitG1) {
     // Better normal approximation
     size_t res = quads[quad_index].resolution;
     auto cross = edgeSamples(quads[quad_index].samples, quads[quad_index].normals, side, res);
@@ -777,7 +785,7 @@ static BSCurve baseCurve(const BSSurface &ribbon) {
   return { ribbon.basisU().degree(), ribbon.basisU().knots(), cpts };
 }
 
-std::vector<BSSurface> QuadFit::fit() {
+std::vector<BSSurface> QuadFit::fit(const std::vector<std::string> &switches) {
   // 1. Simple C0 fit
   auto result = initialFit();
 
@@ -830,12 +838,15 @@ std::vector<BSSurface> QuadFit::fit() {
     correctTwists(result[i], i);
 
   // 7. Compute inner boundary ribbons
+  bool extra = parseSwitch<bool>(switches, "extra-knots");
+  bool fitC0 = parseSwitch<bool>(switches, "fit-curves");
+  bool fitG1 = parseSwitch<bool>(switches, "fit-normals");
   for (size_t i = 0; i < quads.size(); ++i) {
     for (size_t side = 0; side < 4; ++side) {
       auto &b = quads[i].boundaries[side];
       if (b.on_ribbon)
         continue;
-      b.sextic = innerBoundaryRibbon(result, i, side);
+      b.sextic = innerBoundaryRibbon(result, i, side, extra, fitC0, fitG1);
     }
   }
 
@@ -850,176 +861,200 @@ std::vector<BSSurface> QuadFit::fit() {
   }
 
   // 9a. Use a mask to compute the placement of the inner control points
-  for (auto &r : result)
-    applyMask(r, DiscreteMask::C1_COONS);
+  if (parseSwitch<bool>(switches, "coons-patch"))
+    for (auto &r : result)
+      applyMask(r, DiscreteMask::C1_COONS);
+  else {
+    // 9. Fit sampled points using inner control points
+    size_t inner_knots = 5;
+    bool cubic = parseSwitch<size_t>(switches, "cubic-fit", &inner_knots);
+    bool retain_blends = parseSwitch<bool>(switches, "retain-direction-blends");
+    bool retain_ribbons = parseSwitch<bool>(switches, "retain-ribbons");
 
-  // 9. Fit sampled points using inner control points
-  for (size_t i = 0; i < quads.size(); ++i) {
-    const auto &quad = quads[i];
-    result[i] = BSSurface(3, 3, PointVector(16));
-    size_t inner_knots = 3;
-    for (size_t j = 1; j <= inner_knots; ++j) {
-      result[i] = result[i].insertKnotU((double)j / (inner_knots + 1), 1);
-      result[i] = result[i].insertKnotV((double)j / (inner_knots + 1), 1);
+    if (cubic && retain_blends) {
+      std::cerr << "ERROR: Direction blends cannot be retained for cubic fit" << std::endl;
+      retain_blends = false;
     }
-    auto ncp = result[i].numControlPoints();
-    auto constraint = [&](size_t i, size_t j) -> MoveConstraint {
-      // if ((quad.boundaries[0].on_ribbon && i < 2) ||
-      //     (quad.boundaries[1].on_ribbon && j < 2) ||
-      //     (quad.boundaries[2].on_ribbon && i >= ncp[0] - 2) ||
-      //     (quad.boundaries[3].on_ribbon && j >= ncp[1] - 2))
-      //   return MoveType::Fixed();
-      // if (i < 2 || j < 2 || i >= ncp[0] - 2 || j >= ncp[1] - 2)
-      //   return MoveType::Fixed();
-      return MoveType::Free();
-    };
-    // for (size_t j = 0; j < 5; ++j)
-    bsplineFit(result[i], quad.resolution, quad.samples, constraint, 0);
+    if (cubic && retain_ribbons) {
+      std::cerr << "ERROR: Ribbons cannot be retained for cubic fit (yet)" << std::endl;
+      retain_ribbons = false;
+    }
+
+    for (size_t i = 0; i < quads.size(); ++i) {
+      const auto &quad = quads[i];
+      if (cubic) {
+        result[i] = BSSurface(3, 3, PointVector(16));
+        for (size_t j = 1; j <= inner_knots; ++j) {
+          result[i] = result[i].insertKnotU((double)j / (inner_knots + 1), 1);
+          result[i] = result[i].insertKnotV((double)j / (inner_knots + 1), 1);
+        }
+      }
+      auto ncp = result[i].numControlPoints();
+      auto constraint = [&](size_t i, size_t j) -> MoveConstraint {
+        if (retain_blends && (i < 2 || j < 2 || i >= ncp[0] - 2 || j >= ncp[1] - 2))
+          return MoveType::Fixed();
+        if (retain_ribbons &&
+            ((quad.boundaries[0].on_ribbon && i < 2) ||
+             (quad.boundaries[1].on_ribbon && j < 2) ||
+             (quad.boundaries[2].on_ribbon && i >= ncp[0] - 2) ||
+             (quad.boundaries[3].on_ribbon && j >= ncp[1] - 2)))
+          return MoveType::Fixed();
+        return MoveType::Free();
+      };
+      // for (size_t j = 0; j < 5; ++j)
+      bsplineFit(result[i], quad.resolution, quad.samples, constraint, 0);
+    }
   }
 
   // 10. Fix C0 - TODO: knot vectors may need to be unified
-  for (size_t si = 0; si < adjacency.size(); ++si) {
-    const auto &adj = adjacency[si];
-    if (adj.size() == 2) {
-      const auto &q1 = quads[adj[0].first];
-      const auto &q2 = quads[adj[1].first];
-      auto &s1 = result[adj[0].first];
-      auto &s2 = result[adj[1].first];
-      size_t b1 = adj[0].second;
-      size_t b2 = adj[1].second;
-      bool r1 = q1.boundaries[b1].reversed;
-      bool r2 = q2.boundaries[b2].reversed;
-      auto setIndex = [](const BSSurface &s, size_t b, size_t &j, size_t &n) {
-        size_t m;
-        if (b == 0 || b == 2) {
-          n = s.numControlPoints()[1];
-          m = s.numControlPoints()[0];
-        } else {
-          n = s.numControlPoints()[0];
-          m = s.numControlPoints()[1];
-        }
-        if (b < 2)
-          j = 0;
-        else
-          j = m - 1;
-      };
-      size_t j1, j2, n1, n2;
-      setIndex(s1, b1, j1, n1);
-      setIndex(s2, b2, j2, n2);
-      assert(n1 == n2);
-      for (size_t i1 = 0; i1 < n1; ++i1) {
-        size_t i2 = r1 == r2 ? i1 : n1 - i1 - 1;
-        auto &p1 = b1 % 2 == 0 ? s1.controlPoint(j1, i1) : s1.controlPoint(i1, j1);
-        auto &p2 = b2 % 2 == 0 ? s2.controlPoint(j2, i2) : s2.controlPoint(i2, j2);
-        if (i1 == 0 || i1 == n1 - 1) {
-          const auto &v1 = vertices[endpoints[si].first];
-          const auto &v2 = vertices[endpoints[si].second];
-          p1 = (i1 == 0 && !r1) || (i1 != 0 && r1) ? v1 : v2;
-          p2 = (i2 == 0 && !r2) || (i2 != 0 && r2) ? v1 : v2;
-        } else {
-          auto m = (p1 + p2) / 2;
-          p1 = m;
-          p2 = m;
+  if (parseSwitch<bool>(switches, "fix-c0-inside")) {
+    for (size_t si = 0; si < adjacency.size(); ++si) {
+      const auto &adj = adjacency[si];
+      if (adj.size() == 2) {
+        const auto &q1 = quads[adj[0].first];
+        const auto &q2 = quads[adj[1].first];
+        auto &s1 = result[adj[0].first];
+        auto &s2 = result[adj[1].first];
+        size_t b1 = adj[0].second;
+        size_t b2 = adj[1].second;
+        bool r1 = q1.boundaries[b1].reversed;
+        bool r2 = q2.boundaries[b2].reversed;
+        auto setIndex = [](const BSSurface &s, size_t b, size_t &j, size_t &n) {
+          size_t m;
+          if (b == 0 || b == 2) {
+            n = s.numControlPoints()[1];
+            m = s.numControlPoints()[0];
+          } else {
+            n = s.numControlPoints()[0];
+            m = s.numControlPoints()[1];
+          }
+          if (b < 2)
+            j = 0;
+          else
+            j = m - 1;
+        };
+        size_t j1, j2, n1, n2;
+        setIndex(s1, b1, j1, n1);
+        setIndex(s2, b2, j2, n2);
+        assert(n1 == n2);
+        for (size_t i1 = 0; i1 < n1; ++i1) {
+          size_t i2 = r1 == r2 ? i1 : n1 - i1 - 1;
+          auto &p1 = b1 % 2 == 0 ? s1.controlPoint(j1, i1) : s1.controlPoint(i1, j1);
+          auto &p2 = b2 % 2 == 0 ? s2.controlPoint(j2, i2) : s2.controlPoint(i2, j2);
+          if (i1 == 0 || i1 == n1 - 1) {
+            const auto &v1 = vertices[endpoints[si].first];
+            const auto &v2 = vertices[endpoints[si].second];
+            p1 = (i1 == 0 && !r1) || (i1 != 0 && r1) ? v1 : v2;
+            p2 = (i2 == 0 && !r2) || (i2 != 0 && r2) ? v1 : v2;
+          } else {
+            auto m = (p1 + p2) / 2;
+            p1 = m;
+            p2 = m;
+          }
         }
       }
     }
   }
 
-#ifdef DEBUG
-  auto evalNormal = [&](const BSSurface &s, size_t side, double u) ->
-    std::pair<Point3D, Vector3D>
-    {
-      VectorMatrix der;
-      if (side == 0 || side == 2) // v-side
-        s.eval(side == 0 ? 0 : 1, u, 1, der);
-      else // u-side
-        s.eval(u, side == 1 ? 0 : 1, 1, der);
-      return { der[0][0], (der[1][0] ^ der[0][1]).normalize() };
-    };
-  std::cout << "\nMaximal errors:\tC0\tG1 (degrees)" << std::endl;
-  for (const auto &adj : adjacency) {
-    if (adj.size() < 2) {
-      size_t side = adj[0].second;
-      const auto &b = quads[adj[0].first].boundaries[side];
-      const auto &q = result[adj[0].first];
-      size_t resolution = 100;
-      const auto &r = ribbons[b.ribbon];
-      std::cout << "Ribbon #" << b.ribbon + 1 << ":\t";
+  if (parseSwitch<bool>(switches, "fix-c0-outside")) {
+    std::cerr << "ERROR: C0 fix for ribbons is not implemented yet" << std::endl;
+  }
+
+  if (parseSwitch<bool>(switches, "print-continuity-errors")) {
+    auto evalNormal = [&](const BSSurface &s, size_t side, double u) ->
+      std::pair<Point3D, Vector3D>
+      {
+        VectorMatrix der;
+        if (side == 0 || side == 2) // v-side
+          s.eval(side == 0 ? 0 : 1, u, 1, der);
+        else // u-side
+          s.eval(u, side == 1 ? 0 : 1, 1, der);
+        return { der[0][0], (der[1][0] ^ der[0][1]).normalize() };
+      };
+    std::cout << "\nMaximal errors:\tC0\tG1 (degrees)" << std::endl;
+    for (const auto &adj : adjacency) {
+      if (adj.size() < 2) {
+        size_t side = adj[0].second;
+        const auto &b = quads[adj[0].first].boundaries[side];
+        const auto &q = result[adj[0].first];
+        size_t resolution = 100;
+        const auto &r = ribbons[b.ribbon];
+        std::cout << "Ribbon #" << b.ribbon + 1 << ":\t";
+        double max_p_error = 0, max_t_error = 0;
+        for (size_t i = 0; i <= resolution; ++i) {
+          double u = (double)i / resolution;
+          double v = b.s0 * (1 - u) + b.s0 * u;
+          auto [p1, n1] = evalNormal(q, side, u);
+          closestPoint(r[0], p1, v, 20, 0, 0);
+          VectorVector der;
+          Point3D p2 = r[0].eval(v, 1, der);
+          Vector3D n2 = (der[1] ^ (r[1].eval(v) - p2)).normalize();
+          double p_error = (p1 - p2).norm();
+          double t_error = std::acos(std::min(std::max(n1 * n2, -1.0), 1.0)) * 180 / M_PI;
+          max_p_error = std::max(max_p_error, p_error);
+          max_t_error = std::max(max_t_error, t_error);
+        }
+        std::cout << max_p_error << " \t" << max_t_error << std::endl;
+        continue;
+      }
+      std::cout << "Quads #" << adj[0].first + 1 << " - #" << adj[1].first + 1 << ":\t";
+      const auto &q1 = result[adj[0].first];
+      const auto &q2 = result[adj[1].first];
+      size_t side1 = adj[0].second, side2 = adj[1].second;
+      bool reversed = quads[adj[0].first].boundaries[side1].reversed !=
+        quads[adj[1].first].boundaries[side2].reversed;
       double max_p_error = 0, max_t_error = 0;
+      size_t resolution = 100;
       for (size_t i = 0; i <= resolution; ++i) {
         double u = (double)i / resolution;
-        double v = b.s0 * (1 - u) + b.s0 * u;
-        auto [p1, n1] = evalNormal(q, side, u);
-        closestPoint(r[0], p1, v, 20, 0, 0);
-        VectorVector der;
-        Point3D p2 = r[0].eval(v, 1, der);
-        Vector3D n2 = (der[1] ^ (r[1].eval(v) - p2)).normalize();
+        auto [p1, n1] = evalNormal(q1, side1, u);
+        auto [p2, n2] = evalNormal(q2, side2, reversed ? 1 - u : u);
         double p_error = (p1 - p2).norm();
         double t_error = std::acos(std::min(std::max(n1 * n2, -1.0), 1.0)) * 180 / M_PI;
         max_p_error = std::max(max_p_error, p_error);
         max_t_error = std::max(max_t_error, t_error);
       }
       std::cout << max_p_error << " \t" << max_t_error << std::endl;
-      continue;
     }
-    std::cout << "Quads #" << adj[0].first + 1 << " - #" << adj[1].first + 1 << ":\t";
-    const auto &q1 = result[adj[0].first];
-    const auto &q2 = result[adj[1].first];
-    size_t side1 = adj[0].second, side2 = adj[1].second;
-    bool reversed = quads[adj[0].first].boundaries[side1].reversed !=
-      quads[adj[1].first].boundaries[side2].reversed;
-    double max_p_error = 0, max_t_error = 0;
-    size_t resolution = 100;
-    for (size_t i = 0; i <= resolution; ++i) {
-      double u = (double)i / resolution;
-      auto [p1, n1] = evalNormal(q1, side1, u);
-      auto [p2, n2] = evalNormal(q2, side2, reversed ? 1 - u : u);
-      double p_error = (p1 - p2).norm();
-      double t_error = std::acos(std::min(std::max(n1 * n2, -1.0), 1.0)) * 180 / M_PI;
-      max_p_error = std::max(max_p_error, p_error);
-      max_t_error = std::max(max_t_error, t_error);
-    }
-    std::cout << max_p_error << " \t" << max_t_error << std::endl;
+    std::cout << std::endl;
   }
-  std::cout << std::endl;
-#endif // DEBUG
 
-#ifdef DEBUG
-  std::cout << "Curve maximal deviation:\tC0\tG1 (degrees)" << std::endl;
-  for (const auto &adj : adjacency) {
-    if (adj.size() < 2)
-      continue;
-    size_t side = adj[0].second;
-    const auto &q = quads[adj[0].first];
-    const auto &b = q.boundaries[side];
-    auto res = q.resolution;
-    double max_err = 0, max_t_err = 0;
-    size_t max_p, max_t;
-    auto cross = edgeSamples(q.samples, q.normals, side, res);
-    for (size_t i = 0; i <= res; ++i) {
-      auto u = (double)i / res;
-      const auto &[p1, n1] = cross[i];
-      closestPoint(baseCurve(b.sextic), p1, u, 20, 0, 0);
-      VectorMatrix der;
-      auto p2 = b.sextic.eval(u, 0, 1, der);
-      auto n2 = (der[1][0] ^ der[0][1]).normalize();
-      auto err = (p1 - p2).norm();
-      auto t_err = std::acos(std::min(std::abs(n1 * n2), 1.0)) * 180 / M_PI;
-      if (err > max_err) {
-        max_err = err;
-        max_p = i;
+  if (parseSwitch<bool>(switches, "print-approximation-errors")) {
+    std::cout << "Curve maximal deviation:\tC0\tG1 (degrees)" << std::endl;
+    for (const auto &adj : adjacency) {
+      if (adj.size() < 2)
+        continue;
+      size_t side = adj[0].second;
+      const auto &q = quads[adj[0].first];
+      const auto &b = q.boundaries[side];
+      auto res = q.resolution;
+      double max_err = 0, max_t_err = 0;
+      size_t max_p = -1, max_t = -1;
+      auto cross = edgeSamples(q.samples, q.normals, side, res);
+      for (size_t i = 0; i <= res; ++i) {
+        auto u = (double)i / res;
+        const auto &[p1, n1] = cross[i];
+        closestPoint(baseCurve(b.sextic), p1, u, 20, 0, 0);
+        VectorMatrix der;
+        auto p2 = b.sextic.eval(u, 0, 1, der);
+        auto n2 = (der[1][0] ^ der[0][1]).normalize();
+        auto err = (p1 - p2).norm();
+        auto t_err = std::acos(std::min(std::abs(n1 * n2), 1.0)) * 180 / M_PI;
+        if (err > max_err) {
+          max_err = err;
+          max_p = i;
+        }
+        if (t_err > max_t_err) {
+          max_t_err = t_err;
+          max_t = i;
+        }
       }
-      if (t_err > max_t_err) {
-        max_t_err = t_err;
-        max_t = i;
-      }
+      std::cout << "Quads #" << adj[0].first << " - #" << adj[1].first
+                << " (" << max_p << " / " << max_t << "):\t"
+                << max_err << "\t" << max_t_err << std::endl;
     }
-    std::cout << "Quads #" << adj[0].first << " - #" << adj[1].first
-              << " (" << max_p << " / " << max_t << "):\t"
-              << max_err << "\t" << max_t_err << std::endl;
+    std::cout << std::endl;
   }
-  std::cout << std::endl;
-#endif // DEBUG
 
   return result;
 }

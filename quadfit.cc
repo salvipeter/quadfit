@@ -997,8 +997,11 @@ std::vector<BSSurface> QuadFit::fit(const std::vector<std::string> &switches) {
           return MoveType::Fixed();
         return MoveType::Free();
       };
-      // for (size_t j = 0; j < 5; ++j)
-      bsplineFit(result[i], quad.resolution, quad.samples, constraint, 0);
+      if (retain_blends)
+        for (size_t j = 0; j < 5; ++j)
+          bsplineFit(result[i], quad.resolution, quad.samples, constraint, 0, true);
+      else
+        bsplineFit(result[i], quad.resolution, quad.samples, constraint, 0, false);
     }
   }
 

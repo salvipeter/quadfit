@@ -360,7 +360,7 @@ static Point3D closestPoint(const BSSurface &surface, const Point3D &point, doub
 
 void bsplineFit(BSSurface &surface, size_t resolution, const PointVector &samples,
                 const std::function<MoveConstraint(size_t,size_t)> &constraint,
-                double deviation_penalty) {
+                double deviation_penalty, bool parameter_correction) {
   size_t pu = surface.basisU().degree(), pv = surface.basisV().degree();
   auto [nu, nv] = surface.numControlPoints();
   auto &cpts = surface.controlPoints();
@@ -393,7 +393,8 @@ void bsplineFit(BSSurface &surface, size_t resolution, const PointVector &sample
     for (size_t j = 0; j <= resolution; ++j, ++index) {
       double v = (double)j / resolution;
 
-      // closestPoint(surface, samples[index], u, v, 20, 0, 0);
+      if (parameter_correction)
+        closestPoint(surface, samples[index], u, v, 20, 0, 0);
 
       size_t span_u = surface.basisU().findSpan(u);
       size_t span_v = surface.basisV().findSpan(v);

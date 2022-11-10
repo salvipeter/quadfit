@@ -22,6 +22,7 @@ Command line switches:
 |------------------------------|--------------------------------------------------------------|
 | --mesh=*filename.obj*        | Use the specified mesh for jet-fitting curvatures            |
 | --resolution=*n*             | Use the specified resolution for mesh output                 |
+| --fit-tangents               | Extract tangent length from a preliminary C-1 fit            |
 | --extra-knots=*n*            | Add *2n* extra knots to the subdividing curves               |
 | --fit-curves                 | Fit the quartic curves on sampled points                     |
 | --fit-normals                | Fit the cross-derivative curves on sampled normals           |

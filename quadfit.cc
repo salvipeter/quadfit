@@ -173,22 +173,11 @@ void QuadFit::update(const std::vector<std::string> &switches) {
 // Fit cubic Bezier surfaces
 // - boundaries by the boundary curve endpoints & derivatives
 // - twists by parallelogram rule
-std::vector<BSSurface> QuadFit::initialFit() const {
+std::vector<BSSurface> QuadFit::initialFit(bool fit_tangents) const {
   std::vector<BSSurface> result(quads.size());
 
   for (size_t i = 0; i < quads.size(); ++i) {
     auto &b = quads[i].boundaries;
-
-    // High-precision fit to get good tangent vectors
-    // BSSurface simple_fit(3, 3, PointVector(16));
-    // for (size_t j = 1; j <= 15; ++j) {
-    //   simple_fit = simple_fit.insertKnotU(j / 16.0, 1);
-    //   simple_fit = simple_fit.insertKnotV(j / 16.0, 1);
-    // }
-    // auto constraint = [&](size_t i, size_t j) -> MoveConstraint {
-    //   return MoveType::Free();
-    // };
-    // bsplineFit(simple_fit, quads[i].resolution, quads[i].samples, constraint, 0);
 
     PointVector cpts(16);
     for (size_t j = 0; j < 4; ++j) {
@@ -208,33 +197,46 @@ std::vector<BSSurface> QuadFit::initialFit() const {
       cpts[12+j] = getCP(2);
       cpts[3+j*4] = getCP(3);
     }
-    auto setTangentLength = [&](size_t p1, size_t t1, size_t t2, size_t p2) {
-      double d = (cpts[p2] - cpts[p1]).norm() / 3;
-      cpts[t1] = cpts[p1] + (cpts[t1] - cpts[p1]).normalize() * d;
-      cpts[t2] = cpts[p2] + (cpts[t2] - cpts[p2]).normalize() * d;
-    };
-    setTangentLength(0, 1, 2, 3);
-    setTangentLength(0, 4, 8, 12);
-    setTangentLength(12, 13, 14, 15);
-    setTangentLength(3, 7, 11, 15);
-    // auto setTangentLength = [&](bool u, bool u_end, bool v_end) {
-    //   size_t i = u_end ? (v_end ? 15 : 12) : (v_end ? 3 : 0);
-    //   size_t j = i + (u ? (u_end ? -4 : 4) : (v_end ? -1 : 1));
-    //   VectorMatrix der;
-    //   simple_fit.eval(u_end ? 1 : 0, v_end ? 1 : 0, 1, der);
-    //   Vector3D d = u ? der[1][0] : der[0][1];
-    //   if ((u && u_end) || (!u && v_end))
-    //     d *= -1;
-    //   cpts[j] = cpts[i] + d / 3;
-    // };
-    // setTangentLength(false, false, false);
-    // setTangentLength(false, false, true);
-    // setTangentLength(false, true, false);
-    // setTangentLength(false, true, true);
-    // setTangentLength(true, false, false);
-    // setTangentLength(true, false, true);
-    // setTangentLength(true, true, false);
-    // setTangentLength(true, true, true);
+    if (fit_tangents) {
+      // High-precision fit to get good tangent vectors
+      BSSurface simple_fit(3, 3, PointVector(16));
+      for (size_t j = 1; j <= 15; ++j) {
+        simple_fit = simple_fit.insertKnotU(j / 16.0, 1);
+        simple_fit = simple_fit.insertKnotV(j / 16.0, 1);
+      }
+      auto constraint = [&](size_t i, size_t j) -> MoveConstraint {
+        return MoveType::Free();
+      };
+      bsplineFit(simple_fit, quads[i].resolution, quads[i].samples, constraint, 0, false);
+      auto setTangentLength = [&](bool u, bool u_end, bool v_end) {
+        size_t i = u_end ? (v_end ? 15 : 12) : (v_end ? 3 : 0);
+        size_t j = i + (u ? (u_end ? -4 : 4) : (v_end ? -1 : 1));
+        VectorMatrix der;
+        simple_fit.eval(u_end ? 1 : 0, v_end ? 1 : 0, 1, der);
+        Vector3D d = u ? der[1][0] : der[0][1];
+        if ((u && u_end) || (!u && v_end))
+          d *= -1;
+        cpts[j] = cpts[i] + d / 3;
+      };
+      setTangentLength(false, false, false);
+      setTangentLength(false, false, true);
+      setTangentLength(false, true, false);
+      setTangentLength(false, true, true);
+      setTangentLength(true, false, false);
+      setTangentLength(true, false, true);
+      setTangentLength(true, true, false);
+      setTangentLength(true, true, true);
+    } else {
+      auto setTangentLength = [&](size_t p1, size_t t1, size_t t2, size_t p2) {
+        double d = (cpts[p2] - cpts[p1]).norm() / 3;
+        cpts[t1] = cpts[p1] + (cpts[t1] - cpts[p1]).normalize() * d;
+        cpts[t2] = cpts[p2] + (cpts[t2] - cpts[p2]).normalize() * d;
+      };
+      setTangentLength(0, 1, 2, 3);
+      setTangentLength(0, 4, 8, 12);
+      setTangentLength(12, 13, 14, 15);
+      setTangentLength(3, 7, 11, 15);
+    }
     auto setTwist = [&](size_t p, size_t d1, size_t d2, size_t t) {
       cpts[t] = cpts[d1] + (cpts[d2] - cpts[p]);
     };
@@ -885,7 +887,7 @@ void QuadFit::printApproximationErrors(const std::vector<BSSurface> &result) con
 
 std::vector<BSSurface> QuadFit::fit(const std::vector<std::string> &switches) {
   // 1. Simple C0 fit
-  auto result = initialFit();
+  auto result = initialFit(parseSwitch<bool>(switches, "fit-tangents"));
 
   // 2. Fit ribbons
   for (size_t i = 0; i < ribbons.size(); ++i) {

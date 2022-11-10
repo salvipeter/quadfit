@@ -27,7 +27,7 @@ private:
     Geometry::VectorVector normals;
   };
 
-  std::vector<Geometry::BSSurface> initialFit() const;
+  std::vector<Geometry::BSSurface> initialFit(bool fit_tangents) const;
   std::vector<std::pair<size_t, size_t>> ribbonSegments(size_t i) const;
   void correctFirstDerivatives(Geometry::BSSurface &cubic, size_t quad_index) const;
   void correctCubicTwists(Geometry::BSSurface &cubic, size_t quad_index) const;

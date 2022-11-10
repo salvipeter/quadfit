@@ -55,42 +55,42 @@ static Eigen::MatrixXd setupMask(DiscreteMask type, const BSSurface &s, size_t u
       du.push_back(gr_u[i] - gr_u[i-1]);
       dv.push_back(gr_v[i] - gr_v[i-1]);
     }
-    // auto wu = [&](size_t i, size_t j, size_t k) { return 1 / (du[i] * du[j] * du[k]); };
-    // auto wv = [&](size_t i, size_t j, size_t k) { return 1 / (dv[i] * dv[j] * dv[k]); };
-    // DoubleVector u = {
-    //   wu(0,1,2),
-    //   -(wu(0,1,2) + wu(1,1,1) + wu(1,1,2) + wu(1,2,2)),
-    //   wu(1,1,1) + 2 * wu(1,1,2) + 2 * wu(1,2,2) + wu(2,2,2),
-    //   -(wu(3,2,1) + wu(2,2,2) + wu(2,2,1) + wu(2,1,1)),
-    //   wu(3,2,1)
-    // };
-    // DoubleVector v = {
-    //   wv(0,1,2),
-    //   -(wv(0,1,2) + wv(1,1,1) + wv(1,1,2) + wv(1,2,2)),
-    //   wv(1,1,1) + 2 * wv(1,1,2) + 2 * wv(1,2,2) + wv(2,2,2),
-    //   -(wv(3,2,1) + wv(2,2,2) + wv(2,2,1) + wv(2,1,1)),
-    //   wv(3,2,1)
-    // };
-    auto wu = [&](size_t i, size_t j, size_t k) {
-      return 1 / (du[i] * (du[i] + du[j]) * (du[i] + du[j] + du[k]));
-    };
-    auto wv = [&](size_t i, size_t j, size_t k) {
-      return 1 / (dv[i] * (dv[i] + dv[j]) * (dv[i] + dv[j] + dv[k]));
-    };
+    auto wu = [&](size_t i, size_t j, size_t k) { return 1 / (du[i] * du[j] * du[k]); };
+    auto wv = [&](size_t i, size_t j, size_t k) { return 1 / (dv[i] * dv[j] * dv[k]); };
     DoubleVector u = {
       wu(0,1,2),
-      -(wu(0,1,2) + wu(1,0,2) + wu(1,2,0) + wu(1,2,3)),
-      wu(1,0,2) + wu(1,2,0) + wu(2,1,0) + wu(1,2,3) + wu(2,1,3) + wu(2,3,1),
-      -(wu(2,1,0) + wu(2,1,3) + wu(2,3,1) + wu(3,2,1)),
+      -(wu(0,1,2) + wu(1,1,1) + wu(1,1,2) + wu(1,2,2)),
+      wu(1,1,1) + 2 * wu(1,1,2) + 2 * wu(1,2,2) + wu(2,2,2),
+      -(wu(3,2,1) + wu(2,2,2) + wu(2,2,1) + wu(2,1,1)),
       wu(3,2,1)
     };
     DoubleVector v = {
       wv(0,1,2),
-      -(wv(0,1,2) + wv(1,0,2) + wv(1,2,0) + wv(1,2,3)),
-      wv(1,0,2) + wv(1,2,0) + wv(2,1,0) + wv(1,2,3) + wv(2,1,3) + wv(2,3,1),
-      -(wv(2,1,0) + wv(2,1,3) + wv(2,3,1) + wv(3,2,1)),
+      -(wv(0,1,2) + wv(1,1,1) + wv(1,1,2) + wv(1,2,2)),
+      wv(1,1,1) + 2 * wv(1,1,2) + 2 * wv(1,2,2) + wv(2,2,2),
+      -(wv(3,2,1) + wv(2,2,2) + wv(2,2,1) + wv(2,1,1)),
       wv(3,2,1)
     };
+    // auto wu = [&](size_t i, size_t j, size_t k) {
+    //   return 1 / (du[i] * (du[i] + du[j]) * (du[i] + du[j] + du[k]));
+    // };
+    // auto wv = [&](size_t i, size_t j, size_t k) {
+    //   return 1 / (dv[i] * (dv[i] + dv[j]) * (dv[i] + dv[j] + dv[k]));
+    // };
+    // DoubleVector u = {
+    //   wu(0,1,2),
+    //   -(wu(0,1,2) + wu(1,0,2) + wu(1,2,0) + wu(1,2,3)),
+    //   wu(1,0,2) + wu(1,2,0) + wu(2,1,0) + wu(1,2,3) + wu(2,1,3) + wu(2,3,1),
+    //   -(wu(2,1,0) + wu(2,1,3) + wu(2,3,1) + wu(3,2,1)),
+    //   wu(3,2,1)
+    // };
+    // DoubleVector v = {
+    //   wv(0,1,2),
+    //   -(wv(0,1,2) + wv(1,0,2) + wv(1,2,0) + wv(1,2,3)),
+    //   wv(1,0,2) + wv(1,2,0) + wv(2,1,0) + wv(1,2,3) + wv(2,1,3) + wv(2,3,1),
+    //   -(wv(2,1,0) + wv(2,1,3) + wv(2,3,1) + wv(3,2,1)),
+    //   wv(3,2,1)
+    // };
     for (size_t i = 0; i < 5; ++i)
       for (size_t j = 0; j < 5; ++j)
         result(i, j) = u[i] * v[j];

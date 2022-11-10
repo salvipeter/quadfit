@@ -22,7 +22,7 @@ Command line switches:
 |------------------------------|--------------------------------------------------------------|
 | --mesh=*filename.obj*        | Use the specified mesh for jet-fitting curvatures            |
 | --resolution=*n*             | Use the specified resolution for mesh output                 |
-| --extra-knots                | Use 4-segment quartic curves                                 |
+| --extra-knots=*n*            | Add *2n* extra knots to the subdividing curves               |
 | --fit-curves                 | Fit the quartic curves on sampled points                     |
 | --fit-normals                | Fit the cross-derivative curves on sampled normals           |
 | --coons-patch                | Create Coons patches and do not fit to interior samples      |

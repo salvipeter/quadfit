@@ -587,7 +587,7 @@ static auto edgeSamples(const PointVector &samples, const VectorVector &normals,
 
 BSSurface QuadFit::innerBoundaryRibbon(const std::vector<BSSurface> &quintic_patches,
                                        size_t quad_index, size_t side,
-                                       bool extra_knots, bool fitC0, bool fitG1) const {
+                                       size_t extra_knots, bool fitC0, bool fitG1) const {
   const auto &result = quintic_patches;
   size_t i = quad_index;
   auto &b = quads[i].boundaries[side];
@@ -606,9 +606,10 @@ BSSurface QuadFit::innerBoundaryRibbon(const std::vector<BSSurface> &quintic_pat
                der1_1[0] + der1_1[1] * 3 / 8 + der1_1[2] / 24,
                der1_1[0] + der1_1[1] / 8,
                der1_1[0] });
-  if (extra_knots) {
-    c = c.insertKnot(0.25, 1);
-    c = c.insertKnot(0.75, 1);
+  for (size_t i = 1; i <= extra_knots; ++i) {
+    double u = (double)i / (extra_knots + 1);
+    c = c.insertKnot(u / 2, 1);
+    c = c.insertKnot(0.5 + u / 2, 1);
   }
 
   if (fitC0) {
@@ -652,11 +653,12 @@ BSSurface QuadFit::innerBoundaryRibbon(const std::vector<BSSurface> &quintic_pat
     c2.reverse();
   c1 = c1.insertKnot(0.5, 1);
   c2 = c2.insertKnot(0.5, 1);
-  if (extra_knots) {
-    c1 = c1.insertKnot(0.25, 1);
-    c1 = c1.insertKnot(0.75, 1);
-    c2 = c2.insertKnot(0.25, 1);
-    c2 = c2.insertKnot(0.75, 1);
+  for (size_t i = 1; i <= extra_knots; ++i) {
+    double u = (double)i / (extra_knots + 1);
+    c1 = c1.insertKnot(u / 2, 1);
+    c1 = c1.insertKnot(0.5 + u / 2, 1);
+    c2 = c2.insertKnot(u / 2, 1);
+    c2 = c2.insertKnot(0.5 + u / 2, 1);
   }
 
   if (fitG1) {
@@ -934,7 +936,8 @@ std::vector<BSSurface> QuadFit::fit(const std::vector<std::string> &switches) {
     correctTwists(result[i], i);
 
   // 7. Compute inner boundary ribbons
-  bool extra = parseSwitch<bool>(switches, "extra-knots");
+  size_t extra = 0;
+  parseSwitch<size_t>(switches, "extra-knots", &extra, 2);
   bool fitC0 = parseSwitch<bool>(switches, "fit-curves");
   bool fitG1 = parseSwitch<bool>(switches, "fit-normals");
   for (size_t i = 0; i < quads.size(); ++i) {

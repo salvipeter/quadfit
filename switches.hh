@@ -28,7 +28,5 @@ bool parseSwitch(const std::vector<std::string> &switches, std::string s,
       }
       return true;
     }
-  if (value)
-    *value = default_value;
   return false;
 }

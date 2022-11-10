@@ -35,7 +35,7 @@ private:
   void correctTwists(Geometry::BSSurface &quintic, size_t quad_index) const;
   Geometry::BSSurface innerBoundaryRibbon(const std::vector<Geometry::BSSurface> &quintic_patches,
                                           size_t quad_index, size_t side,
-                                          bool extra_knots, bool fitC0, bool fitG1) const;
+                                          size_t extra_knots, bool fitC0, bool fitG1) const;
   void printContinuityErrors(const std::vector<Geometry::BSSurface> &result) const;
   void printApproximationErrors(const std::vector<Geometry::BSSurface> &result) const;
 

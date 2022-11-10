@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
     switches.push_back(argv[i]);
   }
 
-  size_t resolution = 0;
+  size_t resolution = 50;
   parseSwitch<size_t>(switches, "resolution", &resolution, 50);
 
   QuadFit qf;

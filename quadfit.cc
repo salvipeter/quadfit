@@ -593,12 +593,28 @@ static auto edgeSamples(const PointVector &samples, const VectorVector &normals,
   return result;
 }
 
+static Vector3D quadNormal(const BSSurface &surface, size_t side, double t) {
+  double u = 0, v = t;
+  if (side == 1)
+    std::swap(u, v);
+  else if (side == 2)
+    u = 1;
+  else if (side == 3) {
+    u = v;
+    v = 1;
+  }
+  VectorMatrix der;
+  surface.eval(u, v, 1, der);
+  return (der[1][0] ^ der[0][1]).normalize();
+}
+
 BSSurface QuadFit::innerBoundaryRibbon(const std::vector<BSSurface> &quintic_patches,
                                        size_t quad_index, size_t side, size_t extra_knots,
                                        bool prelim_normals, bool fitC0, bool fitG1) const {
   const auto &result = quintic_patches;
   size_t i = quad_index;
-  auto &b = quads[i].boundaries[side];
+  const auto &quad = quads[i];
+  const auto &b = quad.boundaries[side];
   const auto &adj = adjacency[b.segment];
   const auto &opp = adj[0].first == i ? adj[1] : adj[0];
   const auto &b_opp = quads[opp.first].boundaries[opp.second];
@@ -620,31 +636,25 @@ BSSurface QuadFit::innerBoundaryRibbon(const std::vector<BSSurface> &quintic_pat
     c = c.insertKnot(0.5 + u / 2, 1);
   }
 
-  if (prelim_normals && !quads[i].preliminary_fit)
-    quads[i].preliminary_fit = preliminaryFit(i);
+  if (prelim_normals && !quad.preliminary_fit)
+    quad.preliminary_fit = preliminaryFit(i);
 
   // Prepare sampled points & normals
-  size_t res = quads[quad_index].resolution;
+  size_t res = quad.resolution;
   PointVector points;
   VectorVector normals;
   if (fitC0 || fitG1) {
-    auto cross = edgeSamples(quads[quad_index].samples, quads[quad_index].normals, side, res);
+    auto cross = edgeSamples(quad.samples, quad.normals, side, res);
     for (size_t i = 0; i <= res; ++i) {
       const auto &[p, normal] = cross[i];
       points.push_back(p);
       if (prelim_normals) {
-        double u = 0, v = (double)i / res;
-        if (side == 1)
-          std::swap(u, v);
-        else if (side == 2)
-          u = 1;
-        else if (side == 3) {
-          u = v;
-          v = 1;
-        }
-        VectorMatrix der;
-        quads[quad_index].preliminary_fit->eval(u, v, 1, der);
-        normals.push_back((der[1][0] ^ der[0][1]).normalize());
+        double t = (double)i / res;
+        auto n1 = quadNormal(*quad.preliminary_fit, side, t);
+        if (b.reversed != b_opp.reversed)
+          t = 1 - t;
+        auto n2 = quadNormal(*quads[opp.first].preliminary_fit, opp.second, t);
+        normals.push_back((n1 + n2).normalize());
       } else
         normals.push_back(normal);
     }

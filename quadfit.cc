@@ -211,7 +211,7 @@ std::vector<BSSurface> QuadFit::initialFit(bool fit_tangents) const {
       cpts[12+j] = getCP(2);
       cpts[3+j*4] = getCP(3);
     }
-    if (fit_tangents) {
+    if (fit_tangents) {         // TODO: this should be averaged from both sides!!!
       if (!quad.preliminary_fit)
         quad.preliminary_fit = preliminaryFit(i);
       auto setTangentLength = [&](bool u, bool u_end, bool v_end) {
@@ -612,15 +612,14 @@ BSSurface QuadFit::innerBoundaryRibbon(const std::vector<BSSurface> &quintic_pat
                                        size_t quad_index, size_t side, size_t extra_knots,
                                        bool prelim_normals, bool fitC0, bool fitG1) const {
   const auto &result = quintic_patches;
-  size_t i = quad_index;
-  const auto &quad = quads[i];
+  const auto &quad = quads[quad_index];
   const auto &b = quad.boundaries[side];
   const auto &adj = adjacency[b.segment];
-  const auto &opp = adj[0].first == i ? adj[1] : adj[0];
+  const auto &opp = adj[0].first == quad_index ? adj[1] : adj[0];
   const auto &b_opp = quads[opp.first].boundaries[opp.second];
 
-  auto der1_0 = extractDerivatives(result[i], side, false);
-  auto der1_1 = extractDerivatives(result[i], side, true);
+  auto der1_0 = extractDerivatives(result[quad_index], side, false);
+  auto der1_1 = extractDerivatives(result[quad_index], side, true);
   auto der2_0 = extractDerivatives(result[opp.first], opp.second, false);
   auto der2_1 = extractDerivatives(result[opp.first], opp.second, true);
   BSCurve c(4, { 0, 0, 0, 0, 0, 0.5, 1, 1, 1, 1, 1 },
@@ -636,8 +635,12 @@ BSSurface QuadFit::innerBoundaryRibbon(const std::vector<BSSurface> &quintic_pat
     c = c.insertKnot(0.5 + u / 2, 1);
   }
 
-  if (prelim_normals && !quad.preliminary_fit)
-    quad.preliminary_fit = preliminaryFit(i);
+  if (prelim_normals) {
+    if (!quad.preliminary_fit)
+      quad.preliminary_fit = preliminaryFit(quad_index);
+    if (!quads[opp.first].preliminary_fit)
+      quads[opp.first].preliminary_fit = preliminaryFit(opp.first);
+  }
 
   // Prepare sampled points & normals
   size_t res = quad.resolution;

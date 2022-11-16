@@ -170,6 +170,19 @@ void QuadFit::update(const std::vector<std::string> &switches) {
   // writeVertexCurvatures(vertices, jet, "/tmp/curvatures.vtk");
 }
 
+BSSurface QuadFit::preliminaryFit(size_t i) const {
+  BSSurface result(3, 3, PointVector(16));
+  for (size_t j = 1; j <= 15; ++j) {
+    result = result.insertKnotU(j / 16.0, 1);
+    result = result.insertKnotV(j / 16.0, 1);
+  }
+  auto constraint = [&](size_t i, size_t j) -> MoveConstraint {
+    return MoveType::Free();
+  };
+  bsplineFit(result, quads[i].resolution, quads[i].samples, constraint, 0, false);
+  return result;
+}
+
 // Fit cubic Bezier surfaces
 // - boundaries by the boundary curve endpoints & derivatives
 // - twists by parallelogram rule
@@ -177,7 +190,8 @@ std::vector<BSSurface> QuadFit::initialFit(bool fit_tangents) const {
   std::vector<BSSurface> result(quads.size());
 
   for (size_t i = 0; i < quads.size(); ++i) {
-    auto &b = quads[i].boundaries;
+    auto &quad = quads[i];
+    auto &b = quad.boundaries;
 
     PointVector cpts(16);
     for (size_t j = 0; j < 4; ++j) {
@@ -198,21 +212,13 @@ std::vector<BSSurface> QuadFit::initialFit(bool fit_tangents) const {
       cpts[3+j*4] = getCP(3);
     }
     if (fit_tangents) {
-      // High-precision fit to get good tangent vectors
-      BSSurface simple_fit(3, 3, PointVector(16));
-      for (size_t j = 1; j <= 15; ++j) {
-        simple_fit = simple_fit.insertKnotU(j / 16.0, 1);
-        simple_fit = simple_fit.insertKnotV(j / 16.0, 1);
-      }
-      auto constraint = [&](size_t i, size_t j) -> MoveConstraint {
-        return MoveType::Free();
-      };
-      bsplineFit(simple_fit, quads[i].resolution, quads[i].samples, constraint, 0, false);
+      if (!quad.preliminary_fit)
+        quad.preliminary_fit = preliminaryFit(i);
       auto setTangentLength = [&](bool u, bool u_end, bool v_end) {
         size_t i = u_end ? (v_end ? 15 : 12) : (v_end ? 3 : 0);
         size_t j = i + (u ? (u_end ? -4 : 4) : (v_end ? -1 : 1));
         VectorMatrix der;
-        simple_fit.eval(u_end ? 1 : 0, v_end ? 1 : 0, 1, der);
+        quad.preliminary_fit->eval(u_end ? 1 : 0, v_end ? 1 : 0, 1, der);
         Vector3D d = u ? der[1][0] : der[0][1];
         if ((u && u_end) || (!u && v_end))
           d *= -1;
@@ -588,8 +594,8 @@ static auto edgeSamples(const PointVector &samples, const VectorVector &normals,
 }
 
 BSSurface QuadFit::innerBoundaryRibbon(const std::vector<BSSurface> &quintic_patches,
-                                       size_t quad_index, size_t side,
-                                       size_t extra_knots, bool fitC0, bool fitG1) const {
+                                       size_t quad_index, size_t side, size_t extra_knots,
+                                       bool prelim_normals, bool fitC0, bool fitG1) const {
   const auto &result = quintic_patches;
   size_t i = quad_index;
   auto &b = quads[i].boundaries[side];
@@ -614,21 +620,38 @@ BSSurface QuadFit::innerBoundaryRibbon(const std::vector<BSSurface> &quintic_pat
     c = c.insertKnot(0.5 + u / 2, 1);
   }
 
+  if (prelim_normals && !quads[i].preliminary_fit)
+    quads[i].preliminary_fit = preliminaryFit(i);
+
+  // Prepare sampled points & normals
+  size_t res = quads[quad_index].resolution;
+  PointVector points;
+  VectorVector normals;
+  if (fitC0 || fitG1) {
+    auto cross = edgeSamples(quads[quad_index].samples, quads[quad_index].normals, side, res);
+    for (size_t i = 0; i <= res; ++i) {
+      const auto &[p, normal] = cross[i];
+      points.push_back(p);
+      if (prelim_normals) {
+        double u = 0, v = (double)i / res;
+        if (side == 1)
+          std::swap(u, v);
+        else if (side == 2)
+          u = 1;
+        else if (side == 3) {
+          u = v;
+          v = 1;
+        }
+        VectorMatrix der;
+        quads[quad_index].preliminary_fit->eval(u, v, 1, der);
+        normals.push_back((der[1][0] ^ der[0][1]).normalize());
+      } else
+        normals.push_back(normal);
+    }
+  }
+
   if (fitC0) {
     // Better curve approximation
-    PointVector points;
-    VectorVector normals;
-    size_t start = 0, step = 1, res = quads[quad_index].resolution;
-    if (side == 3)
-      start = res;
-    if (side == 2)
-      start = res * (res + 1);
-    if (side == 1 || side == 3)
-      step = res + 1;
-    for (size_t i = 0; i <= res; ++i) {
-      points.push_back(quads[quad_index].samples[start+step*i]);
-      normals.push_back(quads[quad_index].normals[start+step*i]);
-    }
     auto constraint = [=](size_t i) -> MoveConstraint {
       if (i == 2)
         return MoveType::Tangent({(der1_0[1] ^ der1_0[3]).normalize()});
@@ -665,16 +688,9 @@ BSSurface QuadFit::innerBoundaryRibbon(const std::vector<BSSurface> &quintic_pat
 
   if (fitG1) {
     // Better normal approximation
-    size_t res = quads[quad_index].resolution;
-    auto cross = edgeSamples(quads[quad_index].samples, quads[quad_index].normals, side, res);
-    PointVector points;
-    VectorVector normals;
-    for (size_t i = 0; i <= res; ++i) {
-      const auto &[p, normal] = cross[i];
-      // points.push_back(p);
+    points.clear();
+    for (size_t i = 0; i <= res; ++i)
       points.push_back(c.eval((double)i / res));
-      normals.push_back(normal);
-    }
 
     auto fixCenter = [&](BSCurve &curve) {
       auto constraint = [=](size_t i) -> MoveConstraint {
@@ -887,7 +903,7 @@ void QuadFit::printApproximationErrors(const std::vector<BSSurface> &result) con
 
 std::vector<BSSurface> QuadFit::fit(const std::vector<std::string> &switches) {
   // 1. Simple C0 fit
-  auto result = initialFit(parseSwitch<bool>(switches, "fit-tangents"));
+  auto result = initialFit(parseSwitch<bool>(switches, "preliminary-fit-tangents"));
 
   // 2. Fit ribbons
   for (size_t i = 0; i < ribbons.size(); ++i) {
@@ -940,6 +956,7 @@ std::vector<BSSurface> QuadFit::fit(const std::vector<std::string> &switches) {
   // 7. Compute inner boundary ribbons
   size_t extra = 0;
   parseSwitch<size_t>(switches, "extra-knots", &extra, 2);
+  bool prelim_normals = parseSwitch<bool>(switches, "preliminary-fit-normals");
   bool fitC0 = parseSwitch<bool>(switches, "fit-curves");
   bool fitG1 = parseSwitch<bool>(switches, "fit-normals");
   for (size_t i = 0; i < quads.size(); ++i) {
@@ -947,7 +964,7 @@ std::vector<BSSurface> QuadFit::fit(const std::vector<std::string> &switches) {
       auto &b = quads[i].boundaries[side];
       if (b.on_ribbon)
         continue;
-      b.sextic = innerBoundaryRibbon(result, i, side, extra, fitC0, fitG1);
+      b.sextic = innerBoundaryRibbon(result, i, side, extra, prelim_normals, fitC0, fitG1);
     }
   }
 

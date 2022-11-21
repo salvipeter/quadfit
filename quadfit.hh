@@ -1,5 +1,7 @@
 #pragma once
 
+#include <optional>
+
 #include <geometry.hh>
 #include <jet-wrapper.hh>
 
@@ -25,8 +27,10 @@ private:
     size_t resolution;
     Geometry::PointVector samples;
     Geometry::VectorVector normals;
+    mutable std::optional<Geometry::BSSurface> preliminary_fit;
   };
 
+  Geometry::BSSurface preliminaryFit(size_t i) const;
   std::vector<Geometry::BSSurface> initialFit(bool fit_tangents) const;
   std::vector<std::pair<size_t, size_t>> ribbonSegments(size_t i) const;
   void correctFirstDerivatives(Geometry::BSSurface &cubic, size_t quad_index) const;
@@ -34,8 +38,8 @@ private:
   void correctSecondDerivatives(Geometry::BSSurface &quintic, size_t quad_index) const;
   void correctTwists(Geometry::BSSurface &quintic, size_t quad_index) const;
   Geometry::BSSurface innerBoundaryRibbon(const std::vector<Geometry::BSSurface> &quintic_patches,
-                                          size_t quad_index, size_t side,
-                                          size_t extra_knots, bool fitC0, bool fitG1) const;
+                                          size_t quad_index, size_t side, size_t extra_knots,
+                                          bool prelim_normals, bool fitC0, bool fitG1) const;
   void printContinuityErrors(const std::vector<Geometry::BSSurface> &result) const;
   void printApproximationErrors(const std::vector<Geometry::BSSurface> &result) const;
 

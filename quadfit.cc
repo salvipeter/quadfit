@@ -186,7 +186,7 @@ BSSurface QuadFit::preliminaryFit(size_t i) const {
 // Fit cubic Bezier surfaces
 // - boundaries by the boundary curve endpoints & derivatives
 // - twists by parallelogram rule
-std::vector<BSSurface> QuadFit::initialFit(bool fit_tangents) const {
+std::vector<BSSurface> QuadFit::initialFit(bool fit_tangents, bool fit_twists) const {
   std::vector<BSSurface> result(quads.size());
 
   for (size_t i = 0; i < quads.size(); ++i) {
@@ -211,9 +211,11 @@ std::vector<BSSurface> QuadFit::initialFit(bool fit_tangents) const {
       cpts[12+j] = getCP(2);
       cpts[3+j*4] = getCP(3);
     }
-    if (fit_tangents) {         // TODO: this should be averaged from both sides!!!
-      if (!quad.preliminary_fit)
-        quad.preliminary_fit = preliminaryFit(i);
+
+    if ((fit_tangents || fit_twists) && !quad.preliminary_fit)
+      quad.preliminary_fit = preliminaryFit(i);
+
+    if (fit_tangents) {
       auto setTangentLength = [&](bool u, bool u_end, bool v_end) {
         size_t i = u_end ? (v_end ? 15 : 12) : (v_end ? 3 : 0);
         size_t j = i + (u ? (u_end ? -4 : 4) : (v_end ? -1 : 1));
@@ -243,13 +245,32 @@ std::vector<BSSurface> QuadFit::initialFit(bool fit_tangents) const {
       setTangentLength(12, 13, 14, 15);
       setTangentLength(3, 7, 11, 15);
     }
-    auto setTwist = [&](size_t p, size_t d1, size_t d2, size_t t) {
-      cpts[t] = cpts[d1] + (cpts[d2] - cpts[p]);
-    };
-    setTwist(0, 1, 4, 5);
-    setTwist(3, 2, 7, 6);
-    setTwist(12, 8, 13, 9);
-    setTwist(15, 11, 14, 10);
+
+    if (fit_twists) {
+      auto setTwist = [&](bool u_end, bool v_end) {
+        size_t CP = u_end ? (v_end ? 15 : 12) : (v_end ? 3 : 0);
+        size_t CPu = CP + (u_end ? -4 : 4);
+        size_t CPv = CP + (v_end ? -1 : 1);
+        size_t CPuv = CPu + (v_end ? -1 : 1);
+        VectorMatrix der;
+        quad.preliminary_fit->eval(u_end ? 1 : 0, v_end ? 1 : 0, 2, der);
+        bool at_end = (u_end && !v_end) || (!u_end && v_end);
+        cpts[CPuv] = der[1][1] * (at_end ? -1 : 1) / 9 + cpts[CPu] + cpts[CPv] - cpts[CP];
+      };
+      setTwist(false, false);
+      setTwist(false, true);
+      setTwist(true, false);
+      setTwist(true, true);
+    } else {
+      auto setTwist = [&](size_t p, size_t d1, size_t d2, size_t t) {
+        cpts[t] = cpts[d1] + (cpts[d2] - cpts[p]);
+      };
+      setTwist(0, 1, 4, 5);
+      setTwist(3, 2, 7, 6);
+      setTwist(12, 8, 13, 9);
+      setTwist(15, 11, 14, 10);
+    }
+
     result[i] = BSSurface(3, 3, cpts);
   }
 
@@ -425,7 +446,7 @@ static Point3D intersectLines(const Point3D &ap, const Vector3D &ad,
 }
 
 // At the corner between side `side` and `side+1`
-void QuadFit::correctCubicTwists(BSSurface &cubic, size_t quad_index) const {
+void QuadFit::correctCubicTwists(BSSurface &cubic, size_t quad_index, bool heuristic) const {
   static constexpr std::array<size_t, 16> corner_cps = // S, Su, Sv, Suv
     {
        0,  4,  1,  5, // u = 0, v = 0
@@ -460,6 +481,9 @@ void QuadFit::correctCubicTwists(BSSurface &cubic, size_t quad_index) const {
     else
       not_fixed.push_back(CPuv);
   }
+
+  if (!heuristic)
+    return;
 
   // For the time being, set the rest to the mean of the adjacent CPs,
   // or at the quasi-intersection of two fixed segments
@@ -924,7 +948,8 @@ void QuadFit::printApproximationErrors(const std::vector<BSSurface> &result) con
 
 std::vector<BSSurface> QuadFit::fit(const std::vector<std::string> &switches) {
   // 1. Simple C0 fit
-  auto result = initialFit(parseSwitch<bool>(switches, "preliminary-fit-tangents"));
+  auto result = initialFit(parseSwitch<bool>(switches, "preliminary-fit-tangents"),
+                           parseSwitch<bool>(switches, "preliminary-fit-twists"));
 
   // 2. Fit ribbons
   for (size_t i = 0; i < ribbons.size(); ++i) {
@@ -958,8 +983,9 @@ std::vector<BSSurface> QuadFit::fit(const std::vector<std::string> &switches) {
     correctFirstDerivatives(result[i], i);
 
   // 4. Compute the correct twists for corner- and side vertices
+  bool heuristic = !parseSwitch<bool>(switches, "preliminary-fit-twists");
   for (size_t i = 0; i < quads.size(); ++i)
-    correctCubicTwists(result[i], i);
+    correctCubicTwists(result[i], i, heuristic);
 
   // 5. Compute better second derivatives for the quad boundary curves
 

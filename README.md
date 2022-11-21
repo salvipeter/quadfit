@@ -23,6 +23,7 @@ Command line switches:
 | --mesh=*filename.obj*        | Use the specified mesh for jet-fitting curvatures            |
 | --resolution=*n*             | Use the specified resolution for mesh output                 |
 | --preliminary-fit-tangents   | Extract tangent length from a preliminary C-1 fit            |
+| --preliminary-fit-twists     | Extract twist vectors from a preliminary C-1 fit             |
 | --preliminary-fit-normals    | Extract normal vectors from a preliminary C-1 fit            |
 | --extra-knots=*n*            | Add *2n* extra knots to the subdividing curves               |
 | --fit-curves                 | Fit the quartic curves on sampled points                     |

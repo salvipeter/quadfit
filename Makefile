@@ -6,7 +6,7 @@ JETWRAP=../jet-wrapper
 EXTRACT=../bezier-extractions
 
 # Release
-CXXFLAGS=-Wall -pedantic -std=c++17 -O3 -DNDEBUG \
+CXXFLAGS=-Wall -pedantic -std=c++17 -O3 -g -DNDEBUG \
 		 -I$(LIBGEOM) -I$(JETWRAP) -I$(EXTRACT) -I$(EIGEN)
 LDFLAGS=-L. -L$(LIBGEOM)/release -lgeom -lomp
 

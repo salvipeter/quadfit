@@ -587,6 +587,35 @@ static auto edgeSamples(const PointVector &samples, const VectorVector &normals,
   return result;
 }
 
+[[maybe_unused]]
+static Point3D closestPoint(const BSCurve &curve, const Point3D &point, double &u,
+                            size_t max_iteration, double distance_tol, double cosine_tol) {
+  VectorVector der;
+  auto lo = curve.basis().low();
+  auto hi = curve.basis().high();
+
+  for (size_t iteration = 0; iteration < max_iteration; ++iteration) {
+    auto deviation = curve.eval(u, 2, der) - point;
+    auto distance = deviation.norm();
+    if (distance < distance_tol)
+      break;
+
+    double scaled_error = der[1] * deviation;
+    double cosine_err = std::abs(scaled_error) / (der[1].norm() * distance);
+    if (cosine_err < cosine_tol)
+      break;
+
+    double old = u;
+    u -= scaled_error / (der[2] * deviation + der[1] * der[1]);
+    u = std::min(std::max(u, lo), hi);
+
+    if ((der[1] * (u - old)).norm() < distance_tol)
+      break;
+  }
+
+  return der[0];
+}
+
 BSSurface QuadFit::innerBoundaryRibbon(const std::vector<BSSurface> &quintic_patches,
                                        size_t quad_index, size_t side,
                                        size_t extra_knots, bool fitC0, bool fitG1) const {
@@ -750,56 +779,38 @@ static void fillSextic(BSSurface &s, const BSSurface &r0, const BSSurface &r1,
 }
 
 [[maybe_unused]]
-static Point3D closestPoint(const BSCurve &curve, const Point3D &point, double &u,
-                            size_t max_iteration, double distance_tol, double cosine_tol) {
-  VectorVector der;
-  auto lo = curve.basis().low();
-  auto hi = curve.basis().high();
-
-  for (size_t iteration = 0; iteration < max_iteration; ++iteration) {
-    auto deviation = curve.eval(u, 2, der) - point;
-    auto distance = deviation.norm();
-    if (distance < distance_tol)
-      break;
-
-    double scaled_error = der[1] * deviation;
-    double cosine_err = std::abs(scaled_error) / (der[1].norm() * distance);
-    if (cosine_err < cosine_tol)
-      break;
-    
-    double old = u;
-    u -= scaled_error / (der[2] * deviation + der[1] * der[1]);
-    u = std::min(std::max(u, lo), hi);
-
-    if ((der[1] * (u - old)).norm() < distance_tol)
-      break;
+static BSCurve baseCurve(const BSSurface &quad, size_t side) {
+  PointVector cpts;
+  if (side == 0 || side == 2) {
+    // v-side
+    size_t m = side == 0 ? 0 : quad.numControlPoints()[0] - 1;
+    size_t n = quad.numControlPoints()[1];
+    cpts.resize(n);
+    for (size_t i = 0; i < n; ++i)
+      cpts[i] = quad.controlPoint(m, i);
+    return { quad.basisV().degree(), quad.basisV().knots(), cpts };
   }
 
-  return der[0];
-}
-
-// Returns the v = 0 isocurve
-[[maybe_unused]]
-static BSCurve baseCurve(const BSSurface &ribbon) {
-  size_t n = ribbon.numControlPoints()[0];
-  PointVector cpts;
+  // u-side
+  double m = side == 1 ? 0 : quad.numControlPoints()[1] - 1;
+  size_t n = quad.numControlPoints()[0];
   cpts.resize(n);
   for (size_t i = 0; i < n; ++i)
-    cpts[i] = ribbon.controlPoint(i, 0);
-  return { ribbon.basisU().degree(), ribbon.basisU().knots(), cpts };
+    cpts[i] = quad.controlPoint(i, m);
+  return { quad.basisU().degree(), quad.basisU().knots(), cpts };
+}
+
+[[maybe_unused]]
+static std::pair<Point3D, Vector3D> evalNormal(const BSSurface &s, size_t side, double u) {
+  VectorMatrix der;
+  if (side == 0 || side == 2) // v-side
+    s.eval(side == 0 ? 0 : 1, u, 1, der);
+  else // u-side
+    s.eval(u, side == 1 ? 0 : 1, 1, der);
+  return { der[0][0], (der[1][0] ^ der[0][1]).normalize() };
 }
 
 void QuadFit::printContinuityErrors(const std::vector<BSSurface> &result) const {
-  auto evalNormal = [&](const BSSurface &s, size_t side, double u) ->
-    std::pair<Point3D, Vector3D>
-    {
-      VectorMatrix der;
-      if (side == 0 || side == 2) // v-side
-        s.eval(side == 0 ? 0 : 1, u, 1, der);
-      else // u-side
-        s.eval(u, side == 1 ? 0 : 1, 1, der);
-      return { der[0][0], (der[1][0] ^ der[0][1]).normalize() };
-    };
   std::cout << "\nMaximal errors:\tC0\tG1 (degrees)" << std::endl;
   for (const auto &adj : adjacency) {
     if (adj.size() < 2) {
@@ -855,7 +866,6 @@ void QuadFit::printApproximationErrors(const std::vector<BSSurface> &result) con
       continue;
     size_t side = adj[0].second;
     const auto &q = quads[adj[0].first];
-    const auto &b = q.boundaries[side];
     auto res = q.resolution;
     double max_err = 0, max_t_err = 0;
     size_t max_p = -1, max_t = -1;
@@ -863,10 +873,8 @@ void QuadFit::printApproximationErrors(const std::vector<BSSurface> &result) con
     for (size_t i = 0; i <= res; ++i) {
       auto u = (double)i / res;
       const auto &[p1, n1] = cross[i];
-      closestPoint(baseCurve(b.sextic), p1, u, 20, 0, 0);
-      VectorMatrix der;
-      auto p2 = b.sextic.eval(u, 0, 1, der);
-      auto n2 = (der[1][0] ^ der[0][1]).normalize();
+      closestPoint(baseCurve(result[adj[0].first], side), p1, u, 20, 0, 0);
+      auto [p2, n2] = evalNormal(result[adj[0].first], side, u);
       auto err = (p1 - p2).norm();
       auto t_err = std::acos(std::min(std::abs(n1 * n2), 1.0)) * 180 / M_PI;
       if (err > max_err) {

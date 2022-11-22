@@ -1,6 +1,6 @@
 #include <map>
 
-#include <Eigen/IterativeLinearSolvers>
+#include <Eigen/SparseQR>
 #include <Eigen/QR>
 
 #include "bspline-fit.hh"
@@ -380,6 +380,7 @@ void bsplineFit(BSSurface &surface, size_t resolution, const PointVector &sample
   Eigen::MatrixXd b(samples.size() + nvars, 3);
   std::vector<Eigen::Triplet<double>> triplets;
 
+  triplets.reserve(samples.size() * (pu + 1) * (pv + 1) + nu * nv);
   b.setZero();
 
   auto addValue = [&](size_t row, size_t i, size_t j, double x) {
@@ -424,7 +425,7 @@ void bsplineFit(BSSurface &surface, size_t resolution, const PointVector &sample
         }
 
   A.setFromTriplets(triplets.begin(), triplets.end());
-  Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<double>> solver(A);
+  Eigen::SparseQR<Eigen::SparseMatrix<double>, Eigen::COLAMDOrdering<int>> solver(A);
   Eigen::MatrixXd x = solver.solve(b);
 
   index = 0;

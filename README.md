@@ -32,6 +32,7 @@ Command line switches:
 | --cubic-fit=*n*              | Use cubic splines with *n* inner knots to fit                |
 | --fix-c0-inside              | Fix C0 continuity at the subdivision curves                  |
 | --fix-c0-outside             | Fix C0 continuity at the ribbons                             |
+| --retain-boundaries          | Retain quad boundaries                                       |
 | --retain-direction-blends    | Retain the shared direction blends between the quads         |
 | --retain-ribbons             | Retain the original ribbons (scaled unless the fit is cubic) |
 | --print-continuity-errors    | Print C0 and G1 errors between the quads and to the ribbons  |

@@ -1,6 +1,7 @@
 #include <map>
 
-#include <Eigen/Dense>
+#include <Eigen/IterativeLinearSolvers>
+#include <Eigen/QR>
 
 #include "bspline-fit.hh"
 
@@ -375,16 +376,17 @@ void bsplineFit(BSSurface &surface, size_t resolution, const PointVector &sample
       }
   size_t nvars = index;
 
-  Eigen::MatrixXd A(samples.size() + nvars, nvars);
+  Eigen::SparseMatrix<double> A(samples.size() + nvars, nvars);
   Eigen::MatrixXd b(samples.size() + nvars, 3);
+  std::vector<Eigen::Triplet<double>> triplets;
 
-  A.setZero(); b.setZero();
+  b.setZero();
 
   auto addValue = [&](size_t row, size_t i, size_t j, double x) {
     if (std::holds_alternative<MoveType::Fixed>(constraint(i, j)))
       b.row(row) -= VecMap(cpts[i*nv+j].data()) * x;
     else
-      A(row, index_map.at({i,j})) = x;
+      triplets.emplace_back(row, index_map.at({i,j}), x);
   };
 
   index = 0;
@@ -412,15 +414,18 @@ void bsplineFit(BSSurface &surface, size_t resolution, const PointVector &sample
   }
 
   // Deviation terms
-  for (size_t i = 0; i < nu; ++i)
-    for (size_t j = 0; j < nv; ++j)
-      if (std::holds_alternative<MoveType::Free>(constraint(i, j))) {
-        b.row(index) = VecMap(cpts[i*nv+j].data()) * deviation_penalty;
-        A(index, index_map.at({i,j})) = deviation_penalty;
-        index++;
-      }
+  if (deviation_penalty > 0)
+    for (size_t i = 0; i < nu; ++i)
+      for (size_t j = 0; j < nv; ++j)
+        if (std::holds_alternative<MoveType::Free>(constraint(i, j))) {
+          b.row(index) = VecMap(cpts[i*nv+j].data()) * deviation_penalty;
+          triplets.emplace_back(index, index_map.at({i,j}), deviation_penalty);
+          index++;
+        }
 
-  Eigen::MatrixXd x = A.colPivHouseholderQr().solve(b);
+  A.setFromTriplets(triplets.begin(), triplets.end());
+  Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<double>> solver(A);
+  Eigen::MatrixXd x = solver.solve(b);
 
   index = 0;
   for (size_t i = 0; i < nu; ++i)

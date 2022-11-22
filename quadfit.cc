@@ -1033,11 +1033,13 @@ std::vector<BSSurface> QuadFit::fit(const std::vector<std::string> &switches) {
     // 9. Fit sampled points using inner control points
     size_t inner_knots = 5;
     bool cubic = parseSwitch<size_t>(switches, "cubic-fit", &inner_knots);
+    bool retain_boundaries = parseSwitch<bool>(switches, "retain-boundaries");
     bool retain_blends = parseSwitch<bool>(switches, "retain-direction-blends");
     bool retain_ribbons = parseSwitch<bool>(switches, "retain-ribbons");
 
-    if (cubic && retain_blends) {
-      std::cerr << "ERROR: Direction blends cannot be retained for cubic fit" << std::endl;
+    if (cubic && (retain_blends || retain_boundaries)) {
+      std::cerr << "ERROR: Direction blends / boundaries cannot be retained for cubic fit"
+                << std::endl;
       retain_blends = false;
     }
     if (cubic && retain_ribbons) {
@@ -1063,6 +1065,8 @@ std::vector<BSSurface> QuadFit::fit(const std::vector<std::string> &switches) {
              (quad.boundaries[1].on_ribbon && j < 2) ||
              (quad.boundaries[2].on_ribbon && i >= ncp[0] - 2) ||
              (quad.boundaries[3].on_ribbon && j >= ncp[1] - 2)))
+          return MoveType::Fixed();
+        if (retain_boundaries && (i < 1 || j < 1 || i >= ncp[0] - 1 || j >= ncp[1] - 1))
           return MoveType::Fixed();
         return MoveType::Free();
       };

@@ -385,9 +385,10 @@ void QuadFit::correctFirstDerivatives(BSSurface &cubic, size_t quad_index) const
 
   auto &cpts = cubic.controlPoints();
   for (size_t side = 0; side < 4; ++side) {
-    const auto &b = quads[quad_index].boundaries[side];
-    const auto &bp = quads[quad_index].boundaries[(side+3)%4];
-    const auto &bn = quads[quad_index].boundaries[(side+1)%4];
+    const auto &quad = quads[quad_index];
+    const auto &b = quad.boundaries[side];
+    const auto &bp = quad.boundaries[(side+3)%4];
+    const auto &bn = quad.boundaries[(side+1)%4];
     if (b.on_ribbon) {
       // Compute first derivative from the fitted ribbon
       VectorMatrix der;
@@ -727,7 +728,7 @@ BSSurface QuadFit::innerBoundaryRibbon(const std::vector<BSSurface> &quintic_pat
         return MoveType::Tangent({(der1_1[1] ^ der1_1[3]).normalize()});
       return MoveType::Fixed();
     };
-    bsplineFit(c, points, normals, constraint, 1e-15, 0);
+    bsplineFit(c, points, /*normals,*/ constraint, 0, 0);
   }
 
   BSCurve c1({
@@ -764,7 +765,7 @@ BSSurface QuadFit::innerBoundaryRibbon(const std::vector<BSSurface> &quintic_pat
           return MoveType::Normal({normals[res/2]}); // Note: this assumes that resolution is even!
         return MoveType::Fixed();
       };
-      bsplineFit(curve, points, normals, constraint, 1e-15);
+      bsplineFit(curve, points, normals, constraint, 0);
     };
 
     fixCenter(c1);

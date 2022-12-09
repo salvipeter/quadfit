@@ -1,6 +1,8 @@
 # Experiments
 
-All of the experiments below are executed on a 6-sided patch with polynomial boundaries. (General B-spline boundaries have more complications because of small knot intervals etc., which would just obfuscate the results.)
+All of the experiments below are executed on a 6-sided patch with polynomial boundaries. (General B-spline boundaries have more complications because of small knot intervals etc., which would just obfuscate the results.) The quad boundaries are as in the image below.
+
+![Screenshot 0](screenshots/screenshot00.png)
 
 About the data:
 - the underlying GBS surface mesh has resolution 400/200

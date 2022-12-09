@@ -1129,8 +1129,45 @@ std::vector<BSSurface> QuadFit::fit(const std::vector<std::string> &switches) {
     }
   }
 
+  // TODO: only works for polynomial ribbons
   if (parseSwitch<bool>(switches, "fix-c0-outside")) {
-    std::cerr << "ERROR: C0 fix for ribbons is not implemented yet" << std::endl;
+    for (size_t i = 0; i < quads.size(); ++i) {
+      const auto &quad = quads[i];
+      for (size_t side = 0; side < 4; ++side) {
+        const auto &b = quad.boundaries[side];
+        if (!b.on_ribbon)
+          continue;
+        auto r = ribbons[b.ribbon][0];
+        r = r.insertKnot(b.s0, 3);
+        r = r.insertKnot(b.s1, 3);
+        PointVector pv;
+        if (b.s0 != 0 && b.s1 != 0)
+          pv.insert(pv.end(), r.controlPoints().begin() + 3, r.controlPoints().begin() + 7);
+        else
+          pv.insert(pv.end(), r.controlPoints().begin(), r.controlPoints().begin() + 4);
+        if (b.s0 > b.s1)
+          std::reverse(pv.begin(), pv.end());
+        r = BSCurve(pv);
+        size_t k = 0;
+        if (side == 2)
+          k = result[i].numControlPoints()[0] - 1;
+        if (side == 3)
+          k = result[i].numControlPoints()[1] - 1;
+        if (side == 0 || side == 2) {
+          const auto &basis = result[i].basisV();
+          for (auto k : basis.knots())
+            r = r.insertKnot(k, 1);
+          for (size_t j = 0; j < r.controlPoints().size(); ++j)
+            result[i].controlPoint(k, j) = r.controlPoints()[j];
+        } else {
+          const auto &basis = result[i].basisU();
+          for (auto k : basis.knots())
+            r = r.insertKnot(k, 1);
+          for (size_t j = 0; j < r.controlPoints().size(); ++j)
+            result[i].controlPoint(j, k) = r.controlPoints()[j];
+        }
+      }
+    }
   }
 
   if (parseSwitch<bool>(switches, "print-continuity-errors"))

@@ -7,7 +7,7 @@ and a variation where we have exact G1 at the outer boundaries.
 
 1. Subdivide the boundary curves and insert them into the respective quad patches.
 
-1. Add extra knots and fit with all the remaining control points.
+1. Add extra knots (set by `cubic-fit`) and fit with all the remaining control points.
 
 1. Ensure exact C0 continuity along the inner boundaries by taking the mean 
    of the control points of the adjacent quads.
@@ -16,7 +16,6 @@ This gives exact C0 and approximative G1 everywhere with cubic patches.
 
 ```
 ./quadfit-test examples/test.pwgb \
-  --mesh=examples/test.obj \
   --cubic-fit=5 \
   --fix-c0-inside --fix-c0-outside \
   --print-continuity-errors --print-approximation-errors

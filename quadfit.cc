@@ -720,14 +720,28 @@ BSSurface QuadFit::innerBoundaryRibbon(const std::vector<BSSurface> &quintic_pat
 
   if (fitC0) {
     // Better curve approximation
+    // Only fix the endpoints and the tangent near the ribbon
+    bool start_on_ribbon, end_on_ribbon;
+    if (side == 0 || side == 3) {
+      start_on_ribbon = quad.boundaries[(side+1)%4].on_ribbon;
+      end_on_ribbon = quad.boundaries[(side+3)%4].on_ribbon;
+    } else {
+      start_on_ribbon = quad.boundaries[(side+3)%4].on_ribbon;
+      end_on_ribbon = quad.boundaries[(side+1)%4].on_ribbon;
+    }
     auto constraint = [=](size_t i) -> MoveConstraint {
-      if (i == 2)
-        return MoveType::Tangent({(der1_0[1] ^ der1_0[3]).normalize()});
-      if (i > 2 && i < c.controlPoints().size() - 3)
-        return MoveType::Free();
-      if (i == c.controlPoints().size() - 3)
-        return MoveType::Tangent({(der1_1[1] ^ der1_1[3]).normalize()});
-      return MoveType::Fixed();
+      size_t max = c.controlPoints().size() - 1;
+      if ((i == 0 || (start_on_ribbon && i == 1)) ||
+          (i == max || (end_on_ribbon && i == max - 1)))
+        return MoveType::Fixed();
+      return MoveType::Free();
+      // if (i == 2)
+      //   return MoveType::Tangent({(der1_0[1] ^ der1_0[3]).normalize()});
+      // if (i > 2 && i < max - 2)
+      //   return MoveType::Free();
+      // if (i == max - 2)
+      //   return MoveType::Tangent({(der1_1[1] ^ der1_1[3]).normalize()});
+      // return MoveType::Fixed();
     };
     bsplineFit(c, points, /*normals,*/ constraint, 0, 0);
   }

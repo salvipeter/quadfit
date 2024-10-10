@@ -881,6 +881,7 @@ static std::pair<Point3D, Vector3D> evalNormal(const BSSurface &s, size_t side, 
 
 void QuadFit::printContinuityErrors(const std::vector<BSSurface> &result) const {
   std::cout << "\nMaximal errors:\tC0\tG1 (degrees)" << std::endl;
+  double max_rib_c0 = 0, max_rib_g1 = 0, max_quad_c0 = 0, max_quad_g1 = 0;
   for (const auto &adj : adjacency) {
     if (adj.size() < 2) {
       size_t side = adj[0].second;
@@ -903,6 +904,10 @@ void QuadFit::printContinuityErrors(const std::vector<BSSurface> &result) const 
         max_p_error = std::max(max_p_error, p_error);
         max_t_error = std::max(max_t_error, t_error);
       }
+      if (max_p_error > max_rib_c0)
+        max_rib_c0 = max_p_error;
+      if (max_t_error > max_rib_g1)
+        max_rib_g1 = max_t_error;
       std::cout << max_p_error << " \t" << max_t_error << std::endl;
       continue;
     }
@@ -923,8 +928,15 @@ void QuadFit::printContinuityErrors(const std::vector<BSSurface> &result) const 
       max_p_error = std::max(max_p_error, p_error);
       max_t_error = std::max(max_t_error, t_error);
     }
+    if (max_p_error > max_quad_c0)
+      max_quad_c0 = max_p_error;
+    if (max_t_error > max_quad_g1)
+      max_quad_g1 = max_t_error;
     std::cout << max_p_error << " \t" << max_t_error << std::endl;
   }
+  std::cout << std::endl;
+  std::cout << "Max. ribbon error:\t" << max_rib_c0 << "\t" << max_rib_g1 << std::endl;
+  std::cout << "Max. quad error:\t" << max_quad_c0 << "\t" << max_quad_g1 << std::endl;
   std::cout << std::endl;
 }
 

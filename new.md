@@ -50,6 +50,6 @@ It is even better if we do not fix the inner boundaries (skip Step 2 above):
 ```
 ./quadfit-test examples/test.pwgb \
   --extra-knots=1 \
-  --retain-ribbons \
+  --retain-ribbons --fix-c0-inside \
   --print-continuity-errors --print-approximation-errors
 ```

@@ -44,3 +44,12 @@ at the interior boundaries with sextic patches.
   --retain-boundaries --retain-ribbons \
   --print-continuity-errors --print-approximation-errors
 ```
+
+It is even better if we do not fix the inner boundaries (skip Step 2 above):
+
+```
+./quadfit-test examples/test.pwgb \
+  --extra-knots=1 \
+  --retain-ribbons \
+  --print-continuity-errors --print-approximation-errors
+```

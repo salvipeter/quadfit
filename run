@@ -1,0 +1,24 @@
+#!/usr/bin/tclsh
+
+if {$argc != 4} {
+    puts "Usage: $argv0 <filename> <outer-npt> <inner-npt> <knots>"
+    exit
+}
+
+lassign $argv filename outer inner knots
+set prologue "./quadfit-test $filename"
+set stats "--print-continuity-errors --print-approximation-errors"
+
+if {$outer eq "n" && $inner eq "n"} {
+    set cmd "$prologue --cubic-fit=$knots --fix-c0-inside --fix-c0-outside $stats"
+} elseif {$outer eq "t" && $inner eq "p"} {
+    set cmd "$prologue --fit-curves --extra-knots=$knots --retain-boundaries --retain-ribbons $stats"
+} elseif {$outer eq "t" && $inner eq "n"} {
+    set cmd "$prologue --extra-knots=$knots --retain-ribbons $stats"
+} else {
+    puts "Error: configuration not implemented"
+    exit
+}
+
+puts "Executing: $cmd"
+puts [exec {*}$cmd]

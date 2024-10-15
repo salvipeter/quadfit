@@ -42,6 +42,8 @@ private:
                                           bool prelim_normals, bool fitC0, bool fitG1) const;
   void printContinuityErrors(const std::vector<Geometry::BSSurface> &result) const;
   void printApproximationErrors(const std::vector<Geometry::BSSurface> &result) const;
+  void writeDeviation(const Geometry::TriMesh &mesh,
+                      const std::vector<Geometry::BSSurface> &result) const;
 
   std::vector<Ribbon> ribbons;
   std::vector<Geometry::BSCurve> segments;

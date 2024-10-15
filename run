@@ -1,13 +1,18 @@
 #!/usr/bin/tclsh
 
-if {$argc != 4} {
-    puts "Usage: $argv0 <filename> <outer-npt> <inner-npt> <knots>"
+if {$argc != 4 && $argc != 5} {
+    puts "Usage: $argv0 <filename> <outer-npt> <inner-npt> <knots> \[mesh\]"
     exit
 }
 
-lassign $argv filename outer inner knots
+set mesh [lassign $argv filename outer inner knots]
 set prologue "./quadfit-test $filename"
 set stats "--print-continuity-errors --print-approximation-errors"
+
+if {$mesh ne ""} {
+    lappend prologue --mesh=$mesh
+    lappend stats --deviation-map
+}
 
 if {$outer eq "n" && $inner eq "n"} {
     set cmd "$prologue --cubic-fit=$knots --fix-c0-inside --fix-c0-outside $stats"

@@ -6,6 +6,7 @@
 #include "quadfit.hh"
 
 #include "bspline-fit.hh"
+#include "closest-point.hh"
 #include "connect-g1.hh"
 #include "discrete-mask.hh"
 #include "fit-ribbon.hh"
@@ -619,35 +620,6 @@ static auto edgeSamples(const PointVector &samples, const VectorVector &normals,
   return result;
 }
 
-[[maybe_unused]]
-static Point3D closestPoint(const BSCurve &curve, const Point3D &point, double &u,
-                            size_t max_iteration, double distance_tol, double cosine_tol) {
-  VectorVector der;
-  auto lo = curve.basis().low();
-  auto hi = curve.basis().high();
-
-  for (size_t iteration = 0; iteration < max_iteration; ++iteration) {
-    auto deviation = curve.eval(u, 2, der) - point;
-    auto distance = deviation.norm();
-    if (distance < distance_tol)
-      break;
-
-    double scaled_error = der[1] * deviation;
-    double cosine_err = std::abs(scaled_error) / (der[1].norm() * distance);
-    if (cosine_err < cosine_tol)
-      break;
-
-    double old = u;
-    u -= scaled_error / (der[2] * deviation + der[1] * der[1]);
-    u = std::min(std::max(u, lo), hi);
-
-    if ((der[1] * (u - old)).norm() < distance_tol)
-      break;
-  }
-
-  return der[0];
-}
-
 static Vector3D quadNormal(const BSSurface &surface, size_t side, double t) {
   double u = 0, v = t;
   if (side == 1)
@@ -972,6 +944,86 @@ void QuadFit::printApproximationErrors(const std::vector<BSSurface> &result) con
               << max_err << "\t" << max_t_err << std::endl;
   }
   std::cout << std::endl;
+
+  // Compute approximation error of interior points
+  std::ofstream ferr("/tmp/maxerr.obj");
+  double max_error = 0;
+  for (size_t i = 0; i < quads.size(); ++i) {
+    const auto &q = quads[i];
+    const auto &s = result[i];
+    double max = 0;
+    Point2D maxuv;
+    for (size_t j = 0; j <= q.resolution; ++j) {
+      double u = (double)j / q.resolution;
+      for (size_t k = 0; k <= q.resolution; ++k) {
+        double v = (double)k / q.resolution;
+        size_t index = j * (q.resolution + 1) + k;
+        auto d = (s.eval(u, v) - q.samples[index]).norm();
+        if (d > max) {
+          max = d;
+          maxuv = {u, v};
+        }
+      }
+    }
+    std::cout << "Quad #" << i + 1 << ":\t" << max << std::endl;
+    ferr << "v " << s.eval(maxuv[0], maxuv[1]) << std::endl;
+    if (max > max_error)
+      max_error = max;
+  }
+  std::cout << "\nMax. error:\t" << max_error << std::endl;
+  std::cout << "Maximal error positions written to /tmp/maxerr.obj\n" << std::endl;
+}
+
+void QuadFit::writeDeviation(const TriMesh &mesh, const std::vector<BSSurface> &result) const {
+  std::ofstream f("/tmp/deviation.vtk");
+  f << "# vtk DataFile Version 2.0" << std::endl;
+  f << "Deviation map" << std::endl;
+  f << "ASCII" << std::endl;
+  f << "DATASET POLYDATA" << std::endl;
+  f << "POINTS " << mesh.points().size() << " float" << std::endl;
+  for (const auto &p : mesh.points())
+    f << p << std::endl;
+  f << "POLYGONS " << mesh.triangles().size() << ' ' << mesh.triangles().size() * 4 << std::endl;
+  for (const auto &t : mesh.triangles())
+    f << "3 " << t[0] << ' ' << t[1] << ' ' << t[2] << std::endl;
+  f << "POINT_DATA " << mesh.points().size() << std::endl;
+  f << "SCALARS deviation float 1" << std::endl;
+  f << "LOOKUP_TABLE default" << std::endl;
+  for (const auto &p : mesh.points()) {
+    double min = std::numeric_limits<double>::max();
+    double sign = 1;
+    for (const auto &s : result) {
+      double start_min = std::numeric_limits<double>::max();
+      Point2D start;
+      size_t start_res = 10;
+      for (size_t i = 0; i <= start_res; ++i) {
+        double u = (double)i / start_res;
+        for (size_t j = 0; j <= start_res; ++j) {
+          double v  = (double)j / start_res;
+          auto d = (p - s.eval(u, v)).norm();
+          if (d < start_min) {
+            start_min = d;
+            start = { u, v };
+          }
+        }
+      }
+      double u = start[0], v = start[1];
+      auto q = closestPoint(s, p, u, v, 20, 1e-5, 1e-5);
+      auto d = (p - q).norm();
+      if (d < min) {
+        min = d;
+        VectorMatrix der;
+        s.eval(u, v, 1, der);
+        auto n = (der[1][0] ^ der[0][1]).normalized();
+        if ((q - p) * n < 0)
+          sign = -1;
+        else
+          sign = 1;
+      }
+    }
+    f << sign * min << std::endl;
+  }
+  std::cout << "Deviations written to /tmp/deviations.vtk" << std::endl;
 }
 
 std::vector<BSSurface> QuadFit::fit(const std::vector<std::string> &switches) {
@@ -1202,6 +1254,13 @@ std::vector<BSSurface> QuadFit::fit(const std::vector<std::string> &switches) {
 
   if (parseSwitch<bool>(switches, "print-approximation-errors"))
     printApproximationErrors(result);
+
+  std::string mesh_filename;
+  parseSwitch<std::string>(switches, "mesh", &mesh_filename);
+  if (!mesh_filename.empty() && parseSwitch<bool>(switches, "deviation-map")) {
+    auto mesh = TriMesh::readOBJ(mesh_filename);
+    writeDeviation(mesh, result);
+  }
 
   return result;
 }

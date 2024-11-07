@@ -865,7 +865,7 @@ void QuadFit::printContinuityErrors(const std::vector<BSSurface> &result) const 
       double max_p_error = 0, max_t_error = 0;
       for (size_t i = 0; i <= resolution; ++i) {
         double u = (double)i / resolution;
-        double v = b.s0 * (1 - u) + b.s0 * u;
+        double v = b.s0 * (1 - u) + b.s1 * u;
         auto [p1, n1] = evalNormal(q, side, u);
         closestPoint(r[0], p1, v, 20, 0, 0);
         VectorVector der;

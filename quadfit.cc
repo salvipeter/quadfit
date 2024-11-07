@@ -1091,6 +1091,26 @@ std::vector<BSSurface> QuadFit::fit(const std::vector<std::string> &switches) {
       auto &b = quads[i].boundaries[side];
       if (b.on_ribbon)
         continue;
+#if 0
+      // Optional: use simple knots when interior curves are not retained
+      if (!fitC0 && !fitG1) {
+        b.sextic = BSSurface(3, 1, PointVector(4 * 2));
+        auto der1_0 = extractDerivatives(result[i], side, false);
+        auto der1_1 = extractDerivatives(result[i], side, true);
+        b.sextic.controlPoint(0, 0) = der1_0[0];
+        b.sextic.controlPoint(1, 0) = der1_0[0] + der1_0[1] / 3;
+        b.sextic.controlPoint(2, 0) = der1_1[0] + der1_1[1] / 3;
+        b.sextic.controlPoint(3, 0) = der1_1[0];
+        b.sextic.controlPoint(0, 1) = der1_0[0] + der1_0[3];
+        b.sextic.controlPoint(1, 1) = der1_0[0] + der1_0[1] / 3 + der1_0[3] + der1_0[4] / 3;
+        b.sextic.controlPoint(2, 1) = der1_1[0] + der1_1[1] / 3 + der1_1[3] + der1_1[4] / 3;
+        b.sextic.controlPoint(3, 1) = der1_1[0] + der1_1[3];
+        for (size_t k = 0; k < 3; ++k)
+          b.sextic = elevateBezierU(b.sextic);
+        for (size_t i = 0; i < extra; ++i)
+          b.sextic = b.sextic.insertKnotU((double)(i + 3) / (extra + 5), 1);
+      } else
+#endif
       b.sextic = innerBoundaryRibbon(result, i, side, extra, prelim_normals, fitC0, fitG1);
     }
   }

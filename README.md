@@ -30,6 +30,7 @@ Command line switches:
 | --fit-normals                | Fit the cross-derivative curves on sampled normals           |
 | --coons-patch                | Create Coons patches and do not fit to interior samples      |
 | --cubic-fit=*n*              | Use cubic splines with *n* inner knots to fit                |
+| --knot-tolerance=*d*         | Minimum interval between knots (only in cubic fit)           |
 | --fix-c0-inside              | Fix C0 continuity at the subdivision curves                  |
 | --fix-c0-outside             | Fix C0 continuity at the ribbons                             |
 | --retain-boundaries          | Retain quad boundaries                                       |

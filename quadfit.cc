@@ -11,6 +11,7 @@
 #include "discrete-mask.hh"
 #include "fit-ribbon.hh"
 #include "io.hh"
+#include "knots.hh"
 #include "switches.hh"
 
 using namespace Geometry;
@@ -1026,6 +1027,74 @@ void QuadFit::writeDeviation(const TriMesh &mesh, const std::vector<BSSurface> &
   std::cout << "Deviations written to /tmp/deviations.vtk" << std::endl;
 }
 
+static DoubleVector ribbonSliceKnots(const BSBasis &basis, double a, double b, bool reverse) {
+  if (a > b)
+    std::swap(a, b);
+  const auto &knots = basis.knots();
+  DoubleVector result;
+  size_t i = 0;
+  while (knots[i] <= a)
+    i++;
+  std::fill_n(std::back_inserter(result), basis.degree() + 1, a);
+  while (knots[i] < b)
+    result.push_back(knots[i++]);
+  std::fill_n(std::back_inserter(result), basis.degree() + 1, b);
+  auto tmp = BSBasis(basis.degree(), result);
+  tmp.normalize();
+  if (reverse)
+    tmp.reverse();
+  return tmp.knots();
+}
+
+DoubleVector QuadFit::findGoodKnots(size_t i, bool u,
+                                    size_t p, size_t n, double tolerance) const {
+  // Finds the quad/side index pair of the ribbon near the given side of the quad
+  // Also returns a Boolean that shows whether the ribbon has the same orientation or not.
+  auto find = [&](IndexPair qs) {
+    bool reverse = false;
+    while (!quads[qs.first].boundaries[qs.second].on_ribbon) {
+      const auto &b = quads[qs.first].boundaries[qs.second];
+      auto adj = adjacency[b.segment];
+      if (adj[0].first == qs.first) {
+        if (b.reversed != quads[adj[1].first].boundaries[adj[1].second].reversed)
+          reverse = !reverse;
+        qs = adj[1];
+      } else {
+        if (b.reversed != quads[adj[0].first].boundaries[adj[0].second].reversed)
+          reverse = !reverse;
+        qs = adj[0];
+      }
+      qs.second = (qs.second + 2) % 4;
+    }
+    const auto &b = quads[qs.first].boundaries[qs.second];
+    if (b.s0 > b.s1)
+      reverse = !reverse;
+    return std::make_pair(qs, reverse);
+  };
+  auto [qs1, rev1] = find({i, u ? 1 : 0});
+  auto [qs2, rev2] = find({i, u ? 3 : 2});
+  auto [quad1, side1] = qs1;
+  auto [quad2, side2] = qs2;
+  if (quads[quad1].boundaries[side1].ribbon > quads[quad2].boundaries[side2].ribbon) {
+    std::swap(quad1, quad2);
+    std::swap(side1, side2);
+    std::swap(rev1, rev2);
+  }
+  // Returns a normalized knot vector for the `[a,b]` parameter range.
+  // Retains the sense of the ribbon (or reverses it when `reverse` is `true`).
+  const auto &b1 = quads[quad1].boundaries[side1];
+  const auto &b2 = quads[quad2].boundaries[side2];
+  auto k1 = ribbonSliceKnots(ribbons[b1.ribbon][0].basis(), b1.s0, b1.s1, false);
+  auto k2 = ribbonSliceKnots(ribbons[b2.ribbon][0].basis(), b2.s0, b2.s1, true);
+  auto result = generateKnots(k1, k2, p, n, tolerance);
+  if (rev1) {
+    auto tmp = BSBasis(p, result);
+    tmp.reverse();
+    result = tmp.knots();
+  }
+  return result;
+}
+
 std::vector<BSSurface> QuadFit::fit(const std::vector<std::string> &switches) {
   // 1. Simple C0 fit
   auto result = initialFit(parseSwitch<bool>(switches, "preliminary-fit-tangents"),
@@ -1150,11 +1219,12 @@ std::vector<BSSurface> QuadFit::fit(const std::vector<std::string> &switches) {
     for (size_t i = 0; i < quads.size(); ++i) {
       const auto &quad = quads[i];
       if (cubic) {
-        result[i] = BSSurface(3, 3, PointVector(16));
-        for (size_t j = 1; j <= inner_knots; ++j) {
-          result[i] = result[i].insertKnotU((double)j / (inner_knots + 1), 1);
-          result[i] = result[i].insertKnotV((double)j / (inner_knots + 1), 1);
-        }
+        double tolerance = 0.05;
+        parseSwitch<double>(switches, "knot-tolerance", &tolerance);
+        auto knots_u = findGoodKnots(i, true, 3, inner_knots, tolerance);
+        auto knots_v = findGoodKnots(i, false, 3, inner_knots, tolerance);
+        auto n_cpts = (knots_u.size() - 4) * (knots_v.size() - 4);
+        result[i] = BSSurface(3, 3, knots_u, knots_v, PointVector(n_cpts));
       }
       auto ncp = result[i].numControlPoints();
       auto constraint = [&](size_t i, size_t j) -> MoveConstraint {
@@ -1228,7 +1298,7 @@ std::vector<BSSurface> QuadFit::fit(const std::vector<std::string> &switches) {
     }
   }
 
-  // TODO: only works for polynomial ribbons
+  // Assumes cubic ribbons
   if (parseSwitch<bool>(switches, "fix-c0-outside")) {
     for (size_t i = 0; i < quads.size(); ++i) {
       const auto &quad = quads[i];
@@ -1237,33 +1307,45 @@ std::vector<BSSurface> QuadFit::fit(const std::vector<std::string> &switches) {
         if (!b.on_ribbon)
           continue;
         auto r = ribbons[b.ribbon][0];
-        r = r.insertKnot(b.s0, 3);
-        r = r.insertKnot(b.s1, 3);
-        PointVector pv;
-        if (b.s0 != 0 && b.s1 != 0)
-          pv.insert(pv.end(), r.controlPoints().begin() + 3, r.controlPoints().begin() + 7);
-        else
-          pv.insert(pv.end(), r.controlPoints().begin(), r.controlPoints().begin() + 4);
-        if (b.s0 > b.s1)
-          std::reverse(pv.begin(), pv.end());
-        r = BSCurve(pv);
-        size_t k = 0;
-        if (side == 2)
-          k = result[i].numControlPoints()[0] - 1;
-        if (side == 3)
-          k = result[i].numControlPoints()[1] - 1;
-        if (side == 0 || side == 2) {
-          const auto &basis = result[i].basisV();
-          for (auto k : basis.knots())
-            r = r.insertKnot(k, 1);
-          for (size_t j = 0; j < r.controlPoints().size(); ++j)
-            result[i].controlPoint(k, j) = r.controlPoints()[j];
-        } else {
-          const auto &basis = result[i].basisU();
-          for (auto k : basis.knots())
-            r = r.insertKnot(k, 1);
-          for (size_t j = 0; j < r.controlPoints().size(); ++j)
-            result[i].controlPoint(j, k) = r.controlPoints()[j];
+        auto slice = ribbonSliceKnots(r.basis(), b.s0, b.s1, b.s0 > b.s1);
+        // Unify the knot vectors
+        {
+          size_t si = 0;
+          while (si < slice.size()) {
+            const auto &knots = side % 2 == 0
+              ? result[i].basisV().knots()
+              : result[i].basisU().knots();
+            double ks = slice[si];
+            size_t ms = 1;
+            while (si < slice.size() && slice[si+ms] == ks)
+              ms++;
+            size_t ki = 0;
+            while (ki < knots.size() && std::abs(knots[ki] - ks) > epsilon && knots[ki] < ks)
+              ki++;
+            double kn;
+            size_t mn;
+            if (ki == knots.size() || std::abs(knots[ki] - ks) > epsilon) {
+              kn = ks;
+              mn = ms;
+            } else {
+              // Found a similar knot
+              kn = knots[ki];
+              mn = 1;
+              while (ki + mn < knots.size() && knots[ki+mn] == kn)
+                mn++;
+              if (mn < ms)
+                mn = ms - mn;
+              else
+                mn = 0;
+            }
+            if (mn > 0) {
+              if (side % 2 == 0)
+                result[i] = result[i].insertKnotV(kn, mn);
+              else
+                result[i] = result[i].insertKnotU(kn, mn);
+            }
+            si += ms;
+          }
         }
       }
     }

@@ -37,6 +37,8 @@ private:
   void correctCubicTwists(Geometry::BSSurface &cubic, size_t quad_index, bool heuristic) const;
   void correctSecondDerivatives(Geometry::BSSurface &quintic, size_t quad_index) const;
   void correctTwists(Geometry::BSSurface &quintic, size_t quad_index) const;
+  Geometry::DoubleVector findGoodKnots(size_t i, bool u,
+                                       size_t p, size_t n, double tolerance) const;
   Geometry::BSSurface innerBoundaryRibbon(const std::vector<Geometry::BSSurface> &quintic_patches,
                                           size_t quad_index, size_t side, size_t extra_knots,
                                           bool prelim_normals, bool fitC0, bool fitG1) const;

@@ -1,4 +1,4 @@
-all: quadfit-test ribbon-test connect-test
+all: quadfit-test ribbon-test connect-test knots-test
 
 EIGEN=/usr/include/eigen3
 LIBGEOM=../libgeom
@@ -28,6 +28,9 @@ ribbon-test: ribbon-test.o fit-ribbon.o multiply.o io.o $(EXTRACT)/bezier-extrac
 
 connect-test: connect-test.o connect-g1.o multiply.o io.o $(EXTRACT)/bezier-extractions.o
 	$(CXX) -o $@ $^ $(LDFLAGS)
+
+knots-test: knots-test.o knots.o
+	$(CXX) -o $@ $^
 
 .PHONY: clean
 clean:

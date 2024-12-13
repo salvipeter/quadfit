@@ -1298,7 +1298,6 @@ std::vector<BSSurface> QuadFit::fit(const std::vector<std::string> &switches) {
     }
   }
 
-  // Assumes cubic ribbons
   if (parseSwitch<bool>(switches, "fix-c0-outside")) {
     for (size_t i = 0; i < quads.size(); ++i) {
       const auto &quad = quads[i];
@@ -1345,6 +1344,71 @@ std::vector<BSSurface> QuadFit::fit(const std::vector<std::string> &switches) {
                 result[i] = result[i].insertKnotU(kn, mn);
             }
             si += ms;
+          }
+        }
+        // Insert all knots into the ribbon
+        {
+          const auto &knots = side % 2 == 0
+            ? result[i].basisV().knots()
+            : result[i].basisU().knots();
+          size_t ki = 0;
+          while (ki < knots.size()) {
+            double kk = knots[ki];
+            size_t mk = 1;
+            while (ki < knots.size() && knots[ki+mk] == kk)
+              mk++;
+            kk = b.s0 + (b.s1 - b.s0) * kk;
+            const auto &rknots = r.basis().knots();
+            size_t ri = 0;
+            while (ri < rknots.size() && std::abs(rknots[ri] - kk) > epsilon && rknots[ri] < kk)
+              ri++;
+            double kn;
+            size_t mn;
+            if (ri == rknots.size() || std::abs(rknots[ri] - kk) > epsilon) {
+              kn = kk;
+              mn = mk;
+            } else {
+              // Found a similar knot
+              kn = rknots[ri];
+              mn = 1;
+              while (ri + mn < rknots.size() && rknots[ri+mn] == kn)
+                mn++;
+              if (mn < mk)
+                mn = mk - mn;
+              else
+                mn = 0;
+            }
+            if (mn > 0)
+              r = r.insertKnot(kn, mn);
+            ki += mk;
+          }
+        }
+        // Copy ribbon control points
+        {
+          auto [nu, nv] = result[i].numControlPoints();
+          int index, d;
+          if (b.s0 > b.s1) {
+            index = r.basis().findSpan(b.s1 + epsilon) - r.basis().degree() +
+              (side % 2 == 0 ? nv : nu) - 1;
+            d = -1;
+            if (b.s0 == 1)
+              index = r.controlPoints().size() - 1;
+          } else {
+            index = r.basis().findSpan(b.s0) - r.basis().degree();
+            d = 1;
+          }
+          if (side % 2 == 0) {
+            size_t j = side == 0 ? 0 : nu - 1;
+            for (size_t k = 0; k < nv; ++k) {
+              result[i].controlPoint(j, k) = r.controlPoints()[index];
+              index += d;
+            }
+          } else {
+            size_t k = side == 1 ? 0 : nv - 1;
+            for (size_t j = 0; j < nu; ++j) {
+              result[i].controlPoint(j, k) = r.controlPoints()[index];
+              index += d;
+            }
           }
         }
       }

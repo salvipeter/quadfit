@@ -56,7 +56,21 @@ void writeCurves(const std::vector<BSCurve> &curves, std::string filename, size_
   }
 }
 
-void writeQDS(const std::vector<Geometry::BSSurface> &surfaces, std::string filename) {
+void writeControlPolygon(const std::vector<BSCurve> &curves, std::string filename) {
+  std::ofstream f(filename);
+  f.exceptions(std::ios::failbit | std::ios::badbit);
+  size_t index = 0;
+  for (const auto &curve : curves) {
+    for (const auto &p : curve.controlPoints())
+      f << "v " << p << std::endl;
+    f << 'l';
+    for (size_t i = 0; i < curve.controlPoints().size(); ++i)
+      f << ' ' << ++index;
+    f << std::endl;
+  }
+}
+
+void writeQDS(const std::vector<BSSurface> &surfaces, std::string filename) {
   std::ofstream f(filename);
   f.exceptions(std::ios::failbit | std::ios::badbit);
   f << surfaces.size() << std::endl;

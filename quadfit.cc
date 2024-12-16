@@ -3,6 +3,8 @@
 #include <cmath>
 #include <fstream>
 
+#include <bsconnect.hh>
+
 #include "quadfit.hh"
 
 #include "bspline-fit.hh"
@@ -1248,7 +1250,7 @@ std::vector<BSSurface> QuadFit::fit(const std::vector<std::string> &switches) {
     }
   }
 
-  // 10. Fix C0 - TODO: knot vectors may need to be unified
+  // 10. Fix C0
   if (parseSwitch<bool>(switches, "fix-c0-inside")) {
     for (size_t si = 0; si < adjacency.size(); ++si) {
       const auto &adj = adjacency[si];
@@ -1306,6 +1308,7 @@ std::vector<BSSurface> QuadFit::fit(const std::vector<std::string> &switches) {
         if (!b.on_ribbon)
           continue;
         auto r = ribbons[b.ribbon][0];
+        auto r2 = ribbons[b.ribbon][1];
         auto slice = ribbonSliceKnots(r.basis(), b.s0, b.s1, b.s0 > b.s1);
         // Unify the knot vectors
         {
@@ -1378,12 +1381,15 @@ std::vector<BSSurface> QuadFit::fit(const std::vector<std::string> &switches) {
               else
                 mn = 0;
             }
-            if (mn > 0)
+            if (mn > 0) {
               r = r.insertKnot(kn, mn);
+              r2 = r2.insertKnot(kn, mn);
+            }
             ki += mk;
           }
         }
         // Copy ribbon control points
+        PointVector rcp, r2cp;
         {
           auto [nu, nv] = result[i].numControlPoints();
           int index, d;
@@ -1398,19 +1404,36 @@ std::vector<BSSurface> QuadFit::fit(const std::vector<std::string> &switches) {
             d = 1;
           }
           if (side % 2 == 0) {
-            size_t j = side == 0 ? 0 : nu - 1;
+            if (side == 2)
+              result[i].reverseU();
             for (size_t k = 0; k < nv; ++k) {
-              result[i].controlPoint(j, k) = r.controlPoints()[index];
+              rcp.push_back(r.controlPoints()[index]);
+              r2cp.push_back(r2.controlPoints()[index]);
               index += d;
             }
           } else {
-            size_t k = side == 1 ? 0 : nv - 1;
+            result[i].swapUV();
+            if (side == 3)
+              result[i].reverseU();
             for (size_t j = 0; j < nu; ++j) {
-              result[i].controlPoint(j, k) = r.controlPoints()[index];
+              rcp.push_back(r.controlPoints()[index]);
+              r2cp.push_back(r2.controlPoints()[index]);
               index += d;
             }
           }
         }
+        // Master-slave connection fix
+        for (size_t i = 0; i < rcp.size(); ++i)
+          r2cp[i] = rcp[i] + (rcp[i] - r2cp[i]);
+        rcp.insert(rcp.end(), r2cp.begin(), r2cp.end());
+        BSSurface master(1, result[i].basisV().degree(),
+                         { 0, 0, 1, 1 }, result[i].basisV().knots(), rcp);
+        connectBSplineSurfaces(master, result[i], true, true, false,
+                               { 0, 1, 0 }, 100);
+        if (side > 1)
+          result[i].reverseU();
+        if (side % 2 != 0)
+          result[i].swapUV();
       }
     }
   }

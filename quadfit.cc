@@ -1263,6 +1263,7 @@ std::vector<BSSurface> QuadFit::fit(const std::vector<std::string> &switches) {
         size_t b2 = adj[1].second;
         bool r1 = q1.boundaries[b1].reversed;
         bool r2 = q2.boundaries[b2].reversed;
+
         auto setIndex = [](const BSSurface &s, size_t b, size_t &j, size_t &n) {
           size_t m;
           if (b == 0 || b == 2) {
@@ -1296,6 +1297,34 @@ std::vector<BSSurface> QuadFit::fit(const std::vector<std::string> &switches) {
             p2 = m;
           }
         }
+#if 0
+        if (b1 % 2 != 0) s1.swapUV();
+        if (b1 > 1)      s1.reverseU();
+        if (r1)          s1.reverseV();
+        if (b2 % 2 != 0) s2.swapUV();
+        if (b2 > 1)      s2.reverseU();
+        if (r2)          s2.reverseV();
+        PointVector cpts;
+        size_t n = s1.numControlPoints()[1];
+        for (size_t j = 0; j < n; ++j)
+          cpts.push_back((s1.controlPoint(0, j) + s2.controlPoint(0, j)) / 2);
+        for (size_t j = 0; j < n; ++j)
+          cpts.push_back(cpts[j] +
+                         ((s1.controlPoint(0, j) - s1.controlPoint(1, j)) -
+                          (s2.controlPoint(1, j) - s2.controlPoint(0, j))) / 2);
+        BSSurface master(1, s1.basisV().degree(), { 0, 0, 1, 1 }, s1.basisV().knots(), cpts);
+        connectBSplineSurfaces(master, s1, true, false, false, { 1, 2, 0 }, 100);
+        for (size_t j = 0; j < n; ++j)
+          master.controlPoint(1, j) =
+            master.controlPoint(0, j) + (master.controlPoint(0, j) - master.controlPoint(1, j));
+        connectBSplineSurfaces(master, s2, true, false, false, { 1, 2, 0 }, 100);
+        if (r2)          s2.reverseV();
+        if (b2 > 1)      s2.reverseU();
+        if (b2 % 2 != 0) s2.swapUV();
+        if (r1)          s1.reverseV();
+        if (b1 > 1)      s1.reverseU();
+        if (b1 % 2 != 0) s1.swapUV();
+#endif
       }
     }
   }

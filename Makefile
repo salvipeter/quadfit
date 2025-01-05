@@ -1,4 +1,4 @@
-all: quadfit-test ribbon-test connect-test knots-test
+all: quadfit-test ribbon-test connect-test knots-test curves2obj
 
 EIGEN=/usr/include/eigen3
 LIBGEOM=../libgeom
@@ -34,6 +34,9 @@ connect-test: connect-test.o connect-g1.o multiply.o io.o $(EXTRACT)/bezier-extr
 knots-test: knots-test.o knots.o
 	$(CXX) -o $@ $^
 
+curves2obj: curves2obj.cc
+	$(CXX) -o $@ $< $(CXXFLAGS) $(LDFLAGS)
+
 .PHONY: clean
 clean:
-	$(RM) *.o libquadfit.a quadfit-test ribbon-test connect-test
+	$(RM) *.o libquadfit.a quadfit-test ribbon-test connect-test knots-test curves2obj

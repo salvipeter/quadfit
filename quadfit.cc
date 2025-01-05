@@ -289,7 +289,9 @@ std::vector<std::pair<size_t,size_t>> QuadFit::ribbonSegments(size_t index) cons
   auto samePoint = [](const Point3D &a, const Point3D &b) {
     return (a - b).normSqr() == 0; // assumes numerical equivalence!
   };
-  while (!samePoint(p, last)) {
+  bool first = true;
+  while (!samePoint(p, last) || first) {
+    first = false;
     bool found = false;
     for (size_t i = 0; i < quads.size(); ++i) {
       const auto &q = quads[i];
@@ -317,6 +319,7 @@ std::vector<std::pair<size_t,size_t>> QuadFit::ribbonSegments(size_t index) cons
     }
     assert(found);
   }
+  std::cout << "Ribbon " << index << ": " << result.size() << std::endl;
   return result;
 }
 
@@ -1052,8 +1055,10 @@ DoubleVector QuadFit::findGoodKnots(size_t i, bool u,
                                     size_t p, size_t n, double tolerance) const {
   // Finds the quad/side index pair of the ribbon near the given side of the quad
   // Also returns a Boolean that shows whether the ribbon has the same orientation or not.
-  auto find = [&](IndexPair qs) {
+  // If there is no ribbon, exits with an exception
+  auto find = [&](IndexPair start) {
     bool reverse = false;
+    auto qs = start;
     while (!quads[qs.first].boundaries[qs.second].on_ribbon) {
       const auto &b = quads[qs.first].boundaries[qs.second];
       auto adj = adjacency[b.segment];
@@ -1067,34 +1072,45 @@ DoubleVector QuadFit::findGoodKnots(size_t i, bool u,
         qs = adj[0];
       }
       qs.second = (qs.second + 2) % 4;
+      if (qs == start)
+        throw NoRibbon();
     }
     const auto &b = quads[qs.first].boundaries[qs.second];
     if (b.s0 > b.s1)
       reverse = !reverse;
     return std::make_pair(qs, reverse);
   };
-  auto [qs1, rev1] = find({i, u ? 1 : 0});
-  auto [qs2, rev2] = find({i, u ? 3 : 2});
-  auto [quad1, side1] = qs1;
-  auto [quad2, side2] = qs2;
-  if (quads[quad1].boundaries[side1].ribbon > quads[quad2].boundaries[side2].ribbon) {
-    std::swap(quad1, quad2);
-    std::swap(side1, side2);
-    std::swap(rev1, rev2);
+  try {
+    auto [qs1, rev1] = find({i, u ? 1 : 0});
+    auto [qs2, rev2] = find({i, u ? 3 : 2});
+    auto [quad1, side1] = qs1;
+    auto [quad2, side2] = qs2;
+    if (quads[quad1].boundaries[side1].ribbon > quads[quad2].boundaries[side2].ribbon) {
+      std::swap(quad1, quad2);
+      std::swap(side1, side2);
+      std::swap(rev1, rev2);
+    }
+    // Returns a normalized knot vector for the `[a,b]` parameter range.
+    // Retains the sense of the ribbon (or reverses it when `reverse` is `true`).
+    const auto &b1 = quads[quad1].boundaries[side1];
+    const auto &b2 = quads[quad2].boundaries[side2];
+    auto k1 = ribbonSliceKnots(ribbons[b1.ribbon][0].basis(), b1.s0, b1.s1, false);
+    auto k2 = ribbonSliceKnots(ribbons[b2.ribbon][0].basis(), b2.s0, b2.s1, true);
+    auto result = generateKnots(k1, k2, p, n, tolerance);
+    if (rev1) {
+      auto tmp = BSBasis(p, result);
+      tmp.reverse();
+      result = tmp.knots();
+    }
+    return result;
+  } catch(NoRibbon &) {
+    DoubleVector result;
+    std::fill_n(std::back_inserter(result), p + 1, 0);
+    for (size_t i = 1; i <= n; ++i)
+      result.push_back((double)i / (n + 1));
+    std::fill_n(std::back_inserter(result), p + 1, 1);
+    return result;
   }
-  // Returns a normalized knot vector for the `[a,b]` parameter range.
-  // Retains the sense of the ribbon (or reverses it when `reverse` is `true`).
-  const auto &b1 = quads[quad1].boundaries[side1];
-  const auto &b2 = quads[quad2].boundaries[side2];
-  auto k1 = ribbonSliceKnots(ribbons[b1.ribbon][0].basis(), b1.s0, b1.s1, false);
-  auto k2 = ribbonSliceKnots(ribbons[b2.ribbon][0].basis(), b2.s0, b2.s1, true);
-  auto result = generateKnots(k1, k2, p, n, tolerance);
-  if (rev1) {
-    auto tmp = BSBasis(p, result);
-    tmp.reverse();
-    result = tmp.knots();
-  }
-  return result;
 }
 
 std::vector<BSSurface> QuadFit::fit(const std::vector<std::string> &switches) {

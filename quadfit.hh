@@ -12,6 +12,7 @@ public:
   std::vector<Geometry::BSSurface> fit(const std::vector<std::string> &switches);
 
 private:
+  class NoRibbon : public std::exception { };
   using Ribbon = std::array<Geometry::BSCurve, 2>; // outer, inner
   struct Quad {
     struct Boundary {

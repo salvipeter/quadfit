@@ -106,17 +106,19 @@ static BSBasis combineBases(const BSBasis &basis1, const BSBasis &basis2) {
   size_t d = d1 + d2;
   const auto &knots1 = basis1.knots();
   const auto &knots2 = basis2.knots();
-  size_t n1 = knots1.size() - d1 - 1, n2 = knots2.size() - d2 - 1;
+  size_t l1 = knots1.size();
+  size_t l2 = knots2.size();
+  size_t n1 = l1 - d1 - 1, n2 = l2 - d2 - 1;
   DoubleVector knots;
   std::fill_n(std::back_inserter(knots), d + 1, knots1.front());
   size_t i1 = d1 + 1, i2 = d2 + 1;
   while (i1 < n1 || i2 < n2) {
-    if (knots1[i1] < knots2[i2]) {
+    if (i2 == l2 || (i1 < l1 && knots1[i1] < knots2[i2])) {
       double k = knots1[i1];
       size_t m = 0;
       while (knots1[i1] == k) { m++; i1++; }
       std::fill_n(std::back_inserter(knots), m + d2, k);
-    } else if (knots2[i2] < knots1[i1]) {
+    } else if (i1 == l1 || (i2 < l2 && knots2[i2] < knots1[i1])) {
       double k = knots2[i2];
       size_t m = 0;
       while (knots2[i2] == k) { m++; i2++; }
@@ -124,8 +126,8 @@ static BSBasis combineBases(const BSBasis &basis1, const BSBasis &basis2) {
     } else {
       double k = knots1[i1];
       size_t m1 = 0, m2 = 0;
-      while (knots1[i1] == k) { m1++; i1++; }
-      while (knots2[i2] == k) { m2++; i2++; }
+      while (i1 < l1 && knots1[i1] == k) { m1++; i1++; }
+      while (i2 < l2 && knots2[i2] == k) { m2++; i2++; }
       std::fill_n(std::back_inserter(knots), d1 + d2 - std::min(d1 - m1, d2 - m2), k);
     }
   }

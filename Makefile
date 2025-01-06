@@ -9,12 +9,12 @@ CONNECT=../bspline-connect
 # Release
 CXXFLAGS=-Wall -pedantic -std=c++17 -O3 -g -DNDEBUG \
 		 -I$(LIBGEOM) -I$(JETWRAP) -I$(EXTRACT) -I$(EIGEN) -I$(CONNECT)
-LDFLAGS=-L. -L$(LIBGEOM)/release -lgeom -lomp
+LDFLAGS=-L. -L$(LIBGEOM)/release -lgeom -lomp -lgmp
 
 # Debug
-# CXXFLAGS=-Wall -pedantic -std=c++17 -O0 -g -DDEBUG \
+# CXXFLAGS=-Wall -pedantic -std=c++17 -O0 -g -fsanitize=address -DDEBUG \
 # 		 -I$(LIBGEOM) -I$(JETWRAP) -I$(EXTRACT) -I$(EIGEN) -I$(CONNECT)
-# LDFLAGS=-L. -L$(LIBGEOM)/debug -lgeom -lomp
+# LDFLAGS=-L. -L$(LIBGEOM)/debug -lasan -lgeom -lomp -lgmp
 
 quadfit-test: quadfit-test.o libquadfit.a
 	$(CXX) -o $@ $< -lquadfit $(LDFLAGS)
@@ -32,7 +32,7 @@ connect-test: connect-test.o connect-g1.o multiply.o io.o $(EXTRACT)/bezier-extr
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
 knots-test: knots-test.o knots.o
-	$(CXX) -o $@ $^
+	$(CXX) -o $@ $^ $(CXXFLAGS) $(LDFLAGS)
 
 curves2obj: curves2obj.cc
 	$(CXX) -o $@ $< $(CXXFLAGS) $(LDFLAGS)

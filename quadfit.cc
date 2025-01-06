@@ -171,7 +171,8 @@ void QuadFit::update(const std::vector<std::string> &switches) {
   else
     all_points = TriMesh::readOBJ(mesh_filename).points();
 
-  jet = JetWrapper::fit(vertices, JetWrapper::Nearest(all_points));
+  if (!parseSwitch<size_t>(switches, "cubic-fit"))
+    jet = JetWrapper::fit(vertices, JetWrapper::Nearest(all_points));
   // writeVertexCurvatures(vertices, jet, "/tmp/curvatures.vtk");
 }
 
@@ -319,7 +320,6 @@ std::vector<std::pair<size_t,size_t>> QuadFit::ribbonSegments(size_t index) cons
     }
     assert(found);
   }
-  std::cout << "Ribbon " << index << ": " << result.size() << std::endl;
   return result;
 }
 
@@ -1045,9 +1045,9 @@ static DoubleVector ribbonSliceKnots(const BSBasis &basis, double a, double b, b
     result.push_back(knots[i++]);
   std::fill_n(std::back_inserter(result), basis.degree() + 1, b);
   auto tmp = BSBasis(basis.degree(), result);
-  tmp.normalize();
   if (reverse)
     tmp.reverse();
+  tmp.normalize();
   return tmp.knots();
 }
 
@@ -1145,6 +1145,9 @@ std::vector<BSSurface> QuadFit::fit(const std::vector<std::string> &switches) {
     }
   }
 
+  // Skip steps 3-8 when doing a simple cubic fit
+  if (!parseSwitch<size_t>(switches, "cubic-fit")) {
+
   // 3. Compute better first derivatives for the quad boundary curves
   for (size_t i = 0; i < quads.size(); ++i)
     correctFirstDerivatives(result[i], i);
@@ -1210,6 +1213,8 @@ std::vector<BSSurface> QuadFit::fit(const std::vector<std::string> &switches) {
     unifyKnots(result[i], quad.boundaries[1].sextic, quad.boundaries[3].sextic, true);
     fillSextic(result[i], quad.boundaries[0].sextic, quad.boundaries[1].sextic,
                quad.boundaries[2].sextic, quad.boundaries[3].sextic);
+  }
+
   }
 
   // 9a. Use a mask to compute the placement of the inner control points
@@ -1364,7 +1369,7 @@ std::vector<BSSurface> QuadFit::fit(const std::vector<std::string> &switches) {
               : result[i].basisU().knots();
             double ks = slice[si];
             size_t ms = 1;
-            while (si < slice.size() && slice[si+ms] == ks)
+            while (si + ms < slice.size() && slice[si+ms] == ks)
               ms++;
             size_t ki = 0;
             while (ki < knots.size() && std::abs(knots[ki] - ks) > epsilon && knots[ki] < ks)
@@ -1403,7 +1408,7 @@ std::vector<BSSurface> QuadFit::fit(const std::vector<std::string> &switches) {
           while (ki < knots.size()) {
             double kk = knots[ki];
             size_t mk = 1;
-            while (ki < knots.size() && knots[ki+mk] == kk)
+            while (ki + mk < knots.size() && knots[ki+mk] == kk)
               mk++;
             kk = b.s0 + (b.s1 - b.s0) * kk;
             const auto &rknots = r.basis().knots();

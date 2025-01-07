@@ -867,8 +867,9 @@ void QuadFit::printContinuityErrors(const std::vector<BSSurface> &result) const 
       const auto &q = result[adj[0].first];
       size_t resolution = 100;
       const auto &r = ribbons[b.ribbon];
-      std::cout << "Ribbon #" << b.ribbon + 1 << ":\t";
+      std::cout << "Ribbon #" << b.ribbon + 1;
       double max_p_error = 0, max_t_error = 0;
+      size_t max_p = 0, max_t = 0;
       for (size_t i = 0; i <= resolution; ++i) {
         double u = (double)i / resolution;
         double v = b.s0 * (1 - u) + b.s1 * u;
@@ -879,17 +880,24 @@ void QuadFit::printContinuityErrors(const std::vector<BSSurface> &result) const 
         Vector3D n2 = (der[1] ^ (r[1].eval(v) - p2)).normalize();
         double p_error = (p1 - p2).norm();
         double t_error = std::acos(std::min(std::max(n1 * n2, -1.0), 1.0)) * 180 / M_PI;
-        max_p_error = std::max(max_p_error, p_error);
-        max_t_error = std::max(max_t_error, t_error);
+        if (p_error > max_p_error) {
+          max_p_error = p_error;
+          max_p = i;
+        }
+        if (t_error > max_t_error) {
+          max_t_error = t_error;
+          max_t = i;
+        }
       }
       if (max_p_error > max_rib_c0)
         max_rib_c0 = max_p_error;
       if (max_t_error > max_rib_g1)
         max_rib_g1 = max_t_error;
+      std::cout << " (" << max_p << " / " << max_t << "):\t";
       std::cout << max_p_error << " \t" << max_t_error << std::endl;
       continue;
     }
-    std::cout << "Quads #" << adj[0].first + 1 << " - #" << adj[1].first + 1 << ":\t";
+    std::cout << "Quads #" << adj[0].first + 1 << " - #" << adj[1].first + 1;
     const auto &q1 = result[adj[0].first];
     const auto &q2 = result[adj[1].first];
     size_t side1 = adj[0].second, side2 = adj[1].second;
@@ -897,19 +905,27 @@ void QuadFit::printContinuityErrors(const std::vector<BSSurface> &result) const 
       quads[adj[1].first].boundaries[side2].reversed;
     double max_p_error = 0, max_t_error = 0;
     size_t resolution = 100;
+    size_t max_p = 0, max_t = 0;
     for (size_t i = 0; i <= resolution; ++i) {
       double u = (double)i / resolution;
       auto [p1, n1] = evalNormal(q1, side1, u);
       auto [p2, n2] = evalNormal(q2, side2, reversed ? 1 - u : u);
       double p_error = (p1 - p2).norm();
       double t_error = std::acos(std::min(std::max(n1 * n2, -1.0), 1.0)) * 180 / M_PI;
-      max_p_error = std::max(max_p_error, p_error);
-      max_t_error = std::max(max_t_error, t_error);
+      if (p_error > max_p_error) {
+        max_p_error = p_error;
+        max_p = i;
+      }
+      if (t_error > max_t_error) {
+        max_t_error = t_error;
+        max_t = i;
+      }
     }
     if (max_p_error > max_quad_c0)
       max_quad_c0 = max_p_error;
     if (max_t_error > max_quad_g1)
       max_quad_g1 = max_t_error;
+    std::cout << " (" << max_p << " / " << max_t << "):\t";
     std::cout << max_p_error << " \t" << max_t_error << std::endl;
   }
   std::cout << std::endl;
@@ -1325,20 +1341,21 @@ std::vector<BSSurface> QuadFit::fit(const std::vector<std::string> &switches) {
         if (b2 % 2 != 0) s2.swapUV();
         if (b2 > 1)      s2.reverseU();
         if (r2)          s2.reverseV();
-        PointVector cpts;
-        size_t n = s1.numControlPoints()[1];
-        for (size_t j = 0; j < n; ++j)
-          cpts.push_back((s1.controlPoint(0, j) + s2.controlPoint(0, j)) / 2);
-        for (size_t j = 0; j < n; ++j)
-          cpts.push_back(cpts[j] +
-                         ((s1.controlPoint(0, j) - s1.controlPoint(1, j)) -
-                          (s2.controlPoint(1, j) - s2.controlPoint(0, j))) / 2);
-        BSSurface master(1, s1.basisV().degree(), { 0, 0, 1, 1 }, s1.basisV().knots(), cpts);
-        connectBSplineSurfaces(master, s1, true, false, false, { 1, 2, 0 }, 100);
-        for (size_t j = 0; j < n; ++j)
-          master.controlPoint(1, j) =
-            master.controlPoint(0, j) + (master.controlPoint(0, j) - master.controlPoint(1, j));
-        connectBSplineSurfaces(master, s2, true, false, false, { 1, 2, 0 }, 100);
+        connectBSplineSurfaces(s1, s2, true, true, false, { 1, 2, 0 }, 100);
+        // PointVector cpts;
+        // size_t n = s1.numControlPoints()[1];
+        // for (size_t j = 0; j < n; ++j)
+        //   cpts.push_back((s1.controlPoint(0, j) + s2.controlPoint(0, j)) / 2);
+        // for (size_t j = 0; j < n; ++j)
+        //   cpts.push_back(cpts[j] +
+        //                  ((s1.controlPoint(0, j) - s1.controlPoint(1, j)) -
+        //                   (s2.controlPoint(1, j) - s2.controlPoint(0, j))) / 2);
+        // BSSurface master(1, s1.basisV().degree(), { 0, 0, 1, 1 }, s1.basisV().knots(), cpts);
+        // connectBSplineSurfaces(master, s1, true, true, false, { 1, 2, 0 }, 100);
+        // for (size_t j = 0; j < n; ++j)
+        //   master.controlPoint(1, j) =
+        //     master.controlPoint(0, j) + (master.controlPoint(0, j) - master.controlPoint(1, j));
+        // connectBSplineSurfaces(master, s2, true, true, false, { 1, 2, 0 }, 100);
         if (r2)          s2.reverseV();
         if (b2 > 1)      s2.reverseU();
         if (b2 % 2 != 0) s2.swapUV();

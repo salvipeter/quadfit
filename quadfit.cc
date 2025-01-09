@@ -952,6 +952,15 @@ void QuadFit::printContinuityErrors(const std::vector<BSSurface> &result) const 
     f << "LOOKUP_TABLE default" << std::endl;
     for (const auto &e : errors)
       f << e << std::endl;
+    double mean = 0;
+    for (auto e : errors)
+      mean += e;
+    mean /= errors.size();
+    double stddev = 0;
+    for (auto e : errors)
+      stddev += std::pow(e - mean, 2);
+    stddev = std::sqrt(stddev / (errors.size() - 1));
+    std::cout << "Mean G1 deviation: " << mean << " degrees; stddev: " << stddev << std::endl;
     std::cout << "G1 Deviations written to /tmp/g1deviation.vtk\n" << std::endl;
   }
 }
@@ -1203,7 +1212,7 @@ void QuadFit::fixInside(std::vector<Geometry::BSSurface> &result) const {
       if (b2 % 2 != 0) s2.swapUV();
       if (b2 > 1)      s2.reverseU();
       if (r2)          s2.reverseV();
-      connectBSplineSurfaces(s1, s2, true, true, false, { 1, 2, 0 }, 100);
+      connectBSplineSurfaces(s1, s2, false, true, false, { 1, 2, 0 }, 100);
       // PointVector cpts;
       // size_t n = s1.numControlPoints()[1];
       // for (size_t j = 0; j < n; ++j)
@@ -1356,8 +1365,8 @@ void QuadFit::fixOutside(std::vector<Geometry::BSSurface> &result) const {
       rcp.insert(rcp.end(), r2cp.begin(), r2cp.end());
       BSSurface master(1, result[i].basisV().degree(),
                        { 0, 0, 1, 1 }, result[i].basisV().knots(), rcp);
-      connectBSplineSurfaces(master, result[i], true, false, false,
-                             { 0, 1, 0 }, 100);
+      connectBSplineSurfaces(master, result[i], true, true, false,
+                             { 1, 2, 0 }, 100);
       if (side > 1)
         result[i].reverseU();
       if (side % 2 != 0)

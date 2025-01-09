@@ -858,6 +858,8 @@ static std::pair<Point3D, Vector3D> evalNormal(const BSSurface &s, size_t side, 
 }
 
 void QuadFit::printContinuityErrors(const std::vector<BSSurface> &result) const {
+  PointVector points;
+  DoubleVector errors;
   std::cout << "\nMaximal errors:\tC0\tG1 (degrees)" << std::endl;
   double max_rib_c0 = 0, max_rib_g1 = 0, max_quad_c0 = 0, max_quad_g1 = 0;
   for (const auto &adj : adjacency) {
@@ -880,6 +882,8 @@ void QuadFit::printContinuityErrors(const std::vector<BSSurface> &result) const 
         Vector3D n2 = (der[1] ^ (r[1].eval(v) - p2)).normalize();
         double p_error = (p1 - p2).norm();
         double t_error = std::acos(std::min(std::max(n1 * n2, -1.0), 1.0)) * 180 / M_PI;
+        points.push_back(p1);
+        errors.push_back(t_error);
         if (p_error > max_p_error) {
           max_p_error = p_error;
           max_p = i;
@@ -912,6 +916,8 @@ void QuadFit::printContinuityErrors(const std::vector<BSSurface> &result) const 
       auto [p2, n2] = evalNormal(q2, side2, reversed ? 1 - u : u);
       double p_error = (p1 - p2).norm();
       double t_error = std::acos(std::min(std::max(n1 * n2, -1.0), 1.0)) * 180 / M_PI;
+      points.push_back(p1);
+      errors.push_back(t_error);
       if (p_error > max_p_error) {
         max_p_error = p_error;
         max_p = i;
@@ -932,6 +938,22 @@ void QuadFit::printContinuityErrors(const std::vector<BSSurface> &result) const 
   std::cout << "Max. ribbon error:\t" << max_rib_c0 << "\t" << max_rib_g1 << std::endl;
   std::cout << "Max. quad error:\t" << max_quad_c0 << "\t" << max_quad_g1 << std::endl;
   std::cout << std::endl;
+  {
+    std::ofstream f("/tmp/g1deviation.vtk");
+    f << "# vtk DataFile Version 2.0" << std::endl;
+    f << "G1 deviations" << std::endl;
+    f << "ASCII" << std::endl;
+    f << "DATASET POLYDATA" << std::endl;
+    f << "POINTS " << points.size() << " float" << std::endl;
+    for (const auto &p : points)
+      f << p << std::endl;
+    f << "POINT_DATA " << errors.size() << std::endl;
+    f << "SCALARS deviation float 1" << std::endl;
+    f << "LOOKUP_TABLE default" << std::endl;
+    for (const auto &e : errors)
+      f << e << std::endl;
+    std::cout << "G1 Deviations written to /tmp/g1deviation.vtk\n" << std::endl;
+  }
 }
 
 void QuadFit::printApproximationErrors(const std::vector<BSSurface> &result) const {
@@ -1129,6 +1151,221 @@ DoubleVector QuadFit::findGoodKnots(size_t i, bool u,
   }
 }
 
+void QuadFit::fixInside(std::vector<Geometry::BSSurface> &result) const {
+  for (size_t si = 0; si < adjacency.size(); ++si) {
+    const auto &adj = adjacency[si];
+    if (adj.size() == 2) {
+      const auto &q1 = quads[adj[0].first];
+      const auto &q2 = quads[adj[1].first];
+      auto &s1 = result[adj[0].first];
+      auto &s2 = result[adj[1].first];
+      size_t b1 = adj[0].second;
+      size_t b2 = adj[1].second;
+      bool r1 = q1.boundaries[b1].reversed;
+      bool r2 = q2.boundaries[b2].reversed;
+
+      auto setIndex = [](const BSSurface &s, size_t b, size_t &j, size_t &n) {
+        size_t m;
+        if (b == 0 || b == 2) {
+          n = s.numControlPoints()[1];
+          m = s.numControlPoints()[0];
+        } else {
+          n = s.numControlPoints()[0];
+          m = s.numControlPoints()[1];
+        }
+        if (b < 2)
+          j = 0;
+        else
+          j = m - 1;
+      };
+      size_t j1, j2, n1, n2;
+      setIndex(s1, b1, j1, n1);
+      setIndex(s2, b2, j2, n2);
+      assert(n1 == n2);
+      for (size_t i1 = 0; i1 < n1; ++i1) {
+        size_t i2 = r1 == r2 ? i1 : n1 - i1 - 1;
+        auto &p1 = b1 % 2 == 0 ? s1.controlPoint(j1, i1) : s1.controlPoint(i1, j1);
+        auto &p2 = b2 % 2 == 0 ? s2.controlPoint(j2, i2) : s2.controlPoint(i2, j2);
+        if (i1 == 0 || i1 == n1 - 1) {
+          const auto &v1 = vertices[endpoints[si].first];
+          const auto &v2 = vertices[endpoints[si].second];
+          p1 = (i1 == 0 && !r1) || (i1 != 0 && r1) ? v1 : v2;
+          p2 = (i2 == 0 && !r2) || (i2 != 0 && r2) ? v1 : v2;
+        } else {
+          auto m = (p1 + p2) / 2;
+          p1 = m;
+          p2 = m;
+        }
+      }
+      if (b1 % 2 != 0) s1.swapUV();
+      if (b1 > 1)      s1.reverseU();
+      if (r1)          s1.reverseV();
+      if (b2 % 2 != 0) s2.swapUV();
+      if (b2 > 1)      s2.reverseU();
+      if (r2)          s2.reverseV();
+      connectBSplineSurfaces(s1, s2, true, true, false, { 1, 2, 0 }, 100);
+      // PointVector cpts;
+      // size_t n = s1.numControlPoints()[1];
+      // for (size_t j = 0; j < n; ++j)
+      //   cpts.push_back((s1.controlPoint(0, j) + s2.controlPoint(0, j)) / 2);
+      // for (size_t j = 0; j < n; ++j)
+      //   cpts.push_back(cpts[j] +
+      //                  ((s1.controlPoint(0, j) - s1.controlPoint(1, j)) -
+      //                   (s2.controlPoint(1, j) - s2.controlPoint(0, j))) / 2);
+      // BSSurface master(1, s1.basisV().degree(), { 0, 0, 1, 1 }, s1.basisV().knots(), cpts);
+      // connectBSplineSurfaces(master, s1, true, true, false, { 1, 2, 0 }, 100);
+      // for (size_t j = 0; j < n; ++j)
+      //   master.controlPoint(1, j) =
+      //     master.controlPoint(0, j) + (master.controlPoint(0, j) - master.controlPoint(1, j));
+      // connectBSplineSurfaces(master, s2, true, true, false, { 1, 2, 0 }, 100);
+      if (r2)          s2.reverseV();
+      if (b2 > 1)      s2.reverseU();
+      if (b2 % 2 != 0) s2.swapUV();
+      if (r1)          s1.reverseV();
+      if (b1 > 1)      s1.reverseU();
+      if (b1 % 2 != 0) s1.swapUV();
+    }
+  }
+}
+
+void QuadFit::fixOutside(std::vector<Geometry::BSSurface> &result) const {
+  for (size_t i = 0; i < quads.size(); ++i) {
+    const auto &quad = quads[i];
+    for (size_t side = 0; side < 4; ++side) {
+      const auto &b = quad.boundaries[side];
+      if (!b.on_ribbon)
+        continue;
+      auto r = ribbons[b.ribbon][0];
+      auto r2 = ribbons[b.ribbon][1];
+      auto slice = ribbonSliceKnots(r.basis(), b.s0, b.s1, b.s0 > b.s1);
+      // Unify the knot vectors
+      {
+        size_t si = 0;
+        while (si < slice.size()) {
+          const auto &knots = side % 2 == 0
+            ? result[i].basisV().knots()
+            : result[i].basisU().knots();
+          double ks = slice[si];
+          size_t ms = 1;
+          while (si + ms < slice.size() && slice[si+ms] == ks)
+            ms++;
+          size_t ki = 0;
+          while (ki < knots.size() && std::abs(knots[ki] - ks) > epsilon && knots[ki] < ks)
+            ki++;
+          double kn;
+          size_t mn;
+          if (ki == knots.size() || std::abs(knots[ki] - ks) > epsilon) {
+            kn = ks;
+            mn = ms;
+          } else {
+            // Found a similar knot
+            kn = knots[ki];
+            mn = 1;
+            while (ki + mn < knots.size() && knots[ki+mn] == kn)
+              mn++;
+            if (mn < ms)
+              mn = ms - mn;
+            else
+              mn = 0;
+          }
+          if (mn > 0) {
+            if (side % 2 == 0)
+              result[i] = result[i].insertKnotV(kn, mn);
+            else
+              result[i] = result[i].insertKnotU(kn, mn);
+          }
+          si += ms;
+        }
+      }
+      // Insert all knots into the ribbon
+      {
+        const auto &knots = side % 2 == 0
+          ? result[i].basisV().knots()
+          : result[i].basisU().knots();
+        size_t ki = 0;
+        while (ki < knots.size()) {
+          double kk = knots[ki];
+          size_t mk = 1;
+          while (ki + mk < knots.size() && knots[ki+mk] == kk)
+            mk++;
+          kk = b.s0 + (b.s1 - b.s0) * kk;
+          const auto &rknots = r.basis().knots();
+          size_t ri = 0;
+          while (ri < rknots.size() && std::abs(rknots[ri] - kk) > epsilon && rknots[ri] < kk)
+            ri++;
+          double kn;
+          size_t mn;
+          if (ri == rknots.size() || std::abs(rknots[ri] - kk) > epsilon) {
+            kn = kk;
+            mn = mk;
+          } else {
+            // Found a similar knot
+            kn = rknots[ri];
+            mn = 1;
+            while (ri + mn < rknots.size() && rknots[ri+mn] == kn)
+              mn++;
+            if (mn < mk)
+              mn = mk - mn;
+            else
+              mn = 0;
+          }
+          if (mn > 0) {
+            r = r.insertKnot(kn, mn);
+            r2 = r2.insertKnot(kn, mn);
+          }
+          ki += mk;
+        }
+      }
+      // Copy ribbon control points
+      PointVector rcp, r2cp;
+      {
+        auto [nu, nv] = result[i].numControlPoints();
+        int index, d;
+        if (b.s0 > b.s1) {
+          index = r.basis().findSpan(b.s1 + epsilon) - r.basis().degree() +
+            (side % 2 == 0 ? nv : nu) - 1;
+          d = -1;
+          if (b.s0 == 1)
+            index = r.controlPoints().size() - 1;
+        } else {
+          index = r.basis().findSpan(b.s0) - r.basis().degree();
+          d = 1;
+        }
+        if (side % 2 == 0) {
+          if (side == 2)
+            result[i].reverseU();
+          for (size_t k = 0; k < nv; ++k) {
+            rcp.push_back(r.controlPoints()[index]);
+            r2cp.push_back(r2.controlPoints()[index]);
+            index += d;
+          }
+        } else {
+          result[i].swapUV();
+          if (side == 3)
+            result[i].reverseU();
+          for (size_t j = 0; j < nu; ++j) {
+            rcp.push_back(r.controlPoints()[index]);
+            r2cp.push_back(r2.controlPoints()[index]);
+            index += d;
+          }
+        }
+      }
+      // Master-slave connection fix
+      for (size_t i = 0; i < rcp.size(); ++i)
+        r2cp[i] = rcp[i] + (rcp[i] - r2cp[i]);
+      rcp.insert(rcp.end(), r2cp.begin(), r2cp.end());
+      BSSurface master(1, result[i].basisV().degree(),
+                       { 0, 0, 1, 1 }, result[i].basisV().knots(), rcp);
+      connectBSplineSurfaces(master, result[i], true, false, false,
+                             { 0, 1, 0 }, 100);
+      if (side > 1)
+        result[i].reverseU();
+      if (side % 2 != 0)
+        result[i].swapUV();
+    }
+  }
+}
+
 std::vector<BSSurface> QuadFit::fit(const std::vector<std::string> &switches) {
   // 1. Simple C0 fit
   auto result = initialFit(parseSwitch<bool>(switches, "preliminary-fit-tangents"),
@@ -1288,222 +1525,11 @@ std::vector<BSSurface> QuadFit::fit(const std::vector<std::string> &switches) {
   }
 
   // 10. Fix C0
-  if (parseSwitch<bool>(switches, "fix-c0-inside")) {
-    for (size_t si = 0; si < adjacency.size(); ++si) {
-      const auto &adj = adjacency[si];
-      if (adj.size() == 2) {
-        const auto &q1 = quads[adj[0].first];
-        const auto &q2 = quads[adj[1].first];
-        auto &s1 = result[adj[0].first];
-        auto &s2 = result[adj[1].first];
-        size_t b1 = adj[0].second;
-        size_t b2 = adj[1].second;
-        bool r1 = q1.boundaries[b1].reversed;
-        bool r2 = q2.boundaries[b2].reversed;
+  if (parseSwitch<bool>(switches, "fix-c0-inside"))
+    fixInside(result);
 
-        auto setIndex = [](const BSSurface &s, size_t b, size_t &j, size_t &n) {
-          size_t m;
-          if (b == 0 || b == 2) {
-            n = s.numControlPoints()[1];
-            m = s.numControlPoints()[0];
-          } else {
-            n = s.numControlPoints()[0];
-            m = s.numControlPoints()[1];
-          }
-          if (b < 2)
-            j = 0;
-          else
-            j = m - 1;
-        };
-        size_t j1, j2, n1, n2;
-        setIndex(s1, b1, j1, n1);
-        setIndex(s2, b2, j2, n2);
-        assert(n1 == n2);
-        for (size_t i1 = 0; i1 < n1; ++i1) {
-          size_t i2 = r1 == r2 ? i1 : n1 - i1 - 1;
-          auto &p1 = b1 % 2 == 0 ? s1.controlPoint(j1, i1) : s1.controlPoint(i1, j1);
-          auto &p2 = b2 % 2 == 0 ? s2.controlPoint(j2, i2) : s2.controlPoint(i2, j2);
-          if (i1 == 0 || i1 == n1 - 1) {
-            const auto &v1 = vertices[endpoints[si].first];
-            const auto &v2 = vertices[endpoints[si].second];
-            p1 = (i1 == 0 && !r1) || (i1 != 0 && r1) ? v1 : v2;
-            p2 = (i2 == 0 && !r2) || (i2 != 0 && r2) ? v1 : v2;
-          } else {
-            auto m = (p1 + p2) / 2;
-            p1 = m;
-            p2 = m;
-          }
-        }
-#if 0
-        if (b1 % 2 != 0) s1.swapUV();
-        if (b1 > 1)      s1.reverseU();
-        if (r1)          s1.reverseV();
-        if (b2 % 2 != 0) s2.swapUV();
-        if (b2 > 1)      s2.reverseU();
-        if (r2)          s2.reverseV();
-        connectBSplineSurfaces(s1, s2, true, true, false, { 1, 2, 0 }, 100);
-        // PointVector cpts;
-        // size_t n = s1.numControlPoints()[1];
-        // for (size_t j = 0; j < n; ++j)
-        //   cpts.push_back((s1.controlPoint(0, j) + s2.controlPoint(0, j)) / 2);
-        // for (size_t j = 0; j < n; ++j)
-        //   cpts.push_back(cpts[j] +
-        //                  ((s1.controlPoint(0, j) - s1.controlPoint(1, j)) -
-        //                   (s2.controlPoint(1, j) - s2.controlPoint(0, j))) / 2);
-        // BSSurface master(1, s1.basisV().degree(), { 0, 0, 1, 1 }, s1.basisV().knots(), cpts);
-        // connectBSplineSurfaces(master, s1, true, true, false, { 1, 2, 0 }, 100);
-        // for (size_t j = 0; j < n; ++j)
-        //   master.controlPoint(1, j) =
-        //     master.controlPoint(0, j) + (master.controlPoint(0, j) - master.controlPoint(1, j));
-        // connectBSplineSurfaces(master, s2, true, true, false, { 1, 2, 0 }, 100);
-        if (r2)          s2.reverseV();
-        if (b2 > 1)      s2.reverseU();
-        if (b2 % 2 != 0) s2.swapUV();
-        if (r1)          s1.reverseV();
-        if (b1 > 1)      s1.reverseU();
-        if (b1 % 2 != 0) s1.swapUV();
-#endif
-      }
-    }
-  }
-
-  if (parseSwitch<bool>(switches, "fix-c0-outside")) {
-    for (size_t i = 0; i < quads.size(); ++i) {
-      const auto &quad = quads[i];
-      for (size_t side = 0; side < 4; ++side) {
-        const auto &b = quad.boundaries[side];
-        if (!b.on_ribbon)
-          continue;
-        auto r = ribbons[b.ribbon][0];
-        auto r2 = ribbons[b.ribbon][1];
-        auto slice = ribbonSliceKnots(r.basis(), b.s0, b.s1, b.s0 > b.s1);
-        // Unify the knot vectors
-        {
-          size_t si = 0;
-          while (si < slice.size()) {
-            const auto &knots = side % 2 == 0
-              ? result[i].basisV().knots()
-              : result[i].basisU().knots();
-            double ks = slice[si];
-            size_t ms = 1;
-            while (si + ms < slice.size() && slice[si+ms] == ks)
-              ms++;
-            size_t ki = 0;
-            while (ki < knots.size() && std::abs(knots[ki] - ks) > epsilon && knots[ki] < ks)
-              ki++;
-            double kn;
-            size_t mn;
-            if (ki == knots.size() || std::abs(knots[ki] - ks) > epsilon) {
-              kn = ks;
-              mn = ms;
-            } else {
-              // Found a similar knot
-              kn = knots[ki];
-              mn = 1;
-              while (ki + mn < knots.size() && knots[ki+mn] == kn)
-                mn++;
-              if (mn < ms)
-                mn = ms - mn;
-              else
-                mn = 0;
-            }
-            if (mn > 0) {
-              if (side % 2 == 0)
-                result[i] = result[i].insertKnotV(kn, mn);
-              else
-                result[i] = result[i].insertKnotU(kn, mn);
-            }
-            si += ms;
-          }
-        }
-        // Insert all knots into the ribbon
-        {
-          const auto &knots = side % 2 == 0
-            ? result[i].basisV().knots()
-            : result[i].basisU().knots();
-          size_t ki = 0;
-          while (ki < knots.size()) {
-            double kk = knots[ki];
-            size_t mk = 1;
-            while (ki + mk < knots.size() && knots[ki+mk] == kk)
-              mk++;
-            kk = b.s0 + (b.s1 - b.s0) * kk;
-            const auto &rknots = r.basis().knots();
-            size_t ri = 0;
-            while (ri < rknots.size() && std::abs(rknots[ri] - kk) > epsilon && rknots[ri] < kk)
-              ri++;
-            double kn;
-            size_t mn;
-            if (ri == rknots.size() || std::abs(rknots[ri] - kk) > epsilon) {
-              kn = kk;
-              mn = mk;
-            } else {
-              // Found a similar knot
-              kn = rknots[ri];
-              mn = 1;
-              while (ri + mn < rknots.size() && rknots[ri+mn] == kn)
-                mn++;
-              if (mn < mk)
-                mn = mk - mn;
-              else
-                mn = 0;
-            }
-            if (mn > 0) {
-              r = r.insertKnot(kn, mn);
-              r2 = r2.insertKnot(kn, mn);
-            }
-            ki += mk;
-          }
-        }
-        // Copy ribbon control points
-        PointVector rcp, r2cp;
-        {
-          auto [nu, nv] = result[i].numControlPoints();
-          int index, d;
-          if (b.s0 > b.s1) {
-            index = r.basis().findSpan(b.s1 + epsilon) - r.basis().degree() +
-              (side % 2 == 0 ? nv : nu) - 1;
-            d = -1;
-            if (b.s0 == 1)
-              index = r.controlPoints().size() - 1;
-          } else {
-            index = r.basis().findSpan(b.s0) - r.basis().degree();
-            d = 1;
-          }
-          if (side % 2 == 0) {
-            if (side == 2)
-              result[i].reverseU();
-            for (size_t k = 0; k < nv; ++k) {
-              rcp.push_back(r.controlPoints()[index]);
-              r2cp.push_back(r2.controlPoints()[index]);
-              index += d;
-            }
-          } else {
-            result[i].swapUV();
-            if (side == 3)
-              result[i].reverseU();
-            for (size_t j = 0; j < nu; ++j) {
-              rcp.push_back(r.controlPoints()[index]);
-              r2cp.push_back(r2.controlPoints()[index]);
-              index += d;
-            }
-          }
-        }
-        // Master-slave connection fix
-        for (size_t i = 0; i < rcp.size(); ++i)
-          r2cp[i] = rcp[i] + (rcp[i] - r2cp[i]);
-        rcp.insert(rcp.end(), r2cp.begin(), r2cp.end());
-        BSSurface master(1, result[i].basisV().degree(),
-                         { 0, 0, 1, 1 }, result[i].basisV().knots(), rcp);
-        connectBSplineSurfaces(master, result[i], true, true, false,
-                               { 0, 1, 0 }, 100);
-        if (side > 1)
-          result[i].reverseU();
-        if (side % 2 != 0)
-          result[i].swapUV();
-      }
-    }
-  }
+  if (parseSwitch<bool>(switches, "fix-c0-outside"))
+    fixOutside(result);
 
   if (parseSwitch<bool>(switches, "print-continuity-errors"))
     printContinuityErrors(result);

@@ -47,6 +47,8 @@ private:
   void printApproximationErrors(const std::vector<Geometry::BSSurface> &result) const;
   void writeDeviation(const Geometry::TriMesh &mesh,
                       const std::vector<Geometry::BSSurface> &result) const;
+  void fixInside(std::vector<Geometry::BSSurface> &result) const;
+  void fixOutside(std::vector<Geometry::BSSurface> &result) const;
 
   std::vector<Ribbon> ribbons;
   std::vector<Geometry::BSCurve> segments;
